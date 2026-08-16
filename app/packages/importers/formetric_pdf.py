@@ -110,11 +110,23 @@ class FormetricPdfProtocolParser:
         return "Parameter_F4_" in text and "ДИАПАЗОН ДВИЖЕНИЯ" in text
 
     def parse(self, blob: bytes) -> list[ParseResult]:
-        text = self._text(blob)
-        figures = self._figures(blob)
-        if "Parameter_F4_" not in text:
-            raise ValueError("не протокол Parameter_F4_*")
+        """Разбирает ВСЕ разделы протокола, а не первый.
 
+        Настоящий отчёт — многостраничный: «Parameter_F4_Dynamic4D» повторяется
+        для каждого условия («лев окк», «прав окк», «нейтраль»). Разбор целиком
+        как одного документа давал молчаливую порчу: метка условия бралась от
+        первого раздела, а значения — от последнего, потому что одноимённые
+        строки перетирали друг друга. Ошибки при этом не возникало, и результат
+        выглядел правдоподобно — худший вид отказа из возможных.
+        """
+        sections = self._sections(blob)
+        if not sections:
+            raise ValueError("не протокол Parameter_F4_*")
+        return [self._parse_section(text, figures, len(sections))
+                for text, figures in sections]
+
+    def _parse_section(self, text: str, figures: list[Figure],
+                       total_sections: int) -> ParseResult:
         header = _HEADER.search(text)
         variant = header.group(1) if header else "unknown"
         params: dict[str, float] = {}
@@ -157,13 +169,17 @@ class FormetricPdfProtocolParser:
 
         if not params:
             flags.append("no_canonical_columns")
+        if total_sections > 1:
+            # Раздел одного многостраничного отчёта. Метка нужна ниже по потоку:
+            # разделы попадут в РАЗНЫЕ пробы, и это должно быть видно оператору.
+            flags.append(f"multi_section_protocol:{total_sections}")
         if any(f.kind == "caption" for f in figures):
             # Значения, напечатанные на иллюстрации растром, в текстовый слой не
             # попадают. Прибор так печатает угловой перекос таза: в таблице он в
             # миллиметрах, на схеме — в градусах. Разбором это не достаётся.
             flags.append("figure_values_not_in_text_layer")
 
-        return [ParseResult(
+        return ParseResult(
             format_id=self.format_id,
             modality=self.modality,
             device_sw_version=variant,
@@ -175,44 +191,73 @@ class FormetricPdfProtocolParser:
                      "time": header.group(3) if header else "",
                      "condition_label": self._condition(text)},
             figures=figures,
-        )]
+        )
 
-    @staticmethod
-    def _figures(blob: bytes) -> list[Figure]:
-        """Растровые вложения протокола, кроме оформления.
+    def _sections(self, blob: bytes) -> list[tuple[str, list[Figure]]]:
+        """Режет отчёт на разделы по заголовку «Parameter_F4_*».
 
-        Классификация — по геометрии (см. `Figure.kind`). Содержания растра мы
-        не распознаём: OCR давал бы значения без прослеживаемости к прибору,
-        а §5 требует, чтобы каждое значение имело источник и знак.
+        Единица деления — заголовок, а не страница: раздел может занимать
+        несколько страниц, а одна страница — нести только продолжение таблицы.
+        Иллюстрации страницы отходят разделу, который на этой странице идёт
+        (или продолжается): привязать картинку точнее нечем, а выбросить —
+        значит потерять данные молча (§5.1).
         """
+        sections: list[tuple[list[str], list[Figure]]] = []
+        for text, figures in self._pages(blob):
+            starts = [m.start() for m in _HEADER.finditer(text)]
+            if not starts:
+                if sections:
+                    sections[-1][0].append(text)
+                    sections[-1][1].extend(figures)
+                continue
+            head = text[:starts[0]].strip()
+            if head and sections:
+                sections[-1][0].append(head)      # хвост предыдущего раздела
+            bounds = starts + [len(text)]
+            for i, begin in enumerate(starts):
+                chunk = text[begin:bounds[i + 1]]
+                # Иллюстрации страницы получает ПЕРВЫЙ её раздел: печать ведёт
+                # схемы сразу за заголовком, а разносить их по позиции в потоке
+                # нельзя — координат у растра в текстовом слое нет.
+                sections.append(([chunk], figures if i == 0 else []))
+        return [("\n".join(parts), figs) for parts, figs in sections]
+
+    def _pages(self, blob: bytes) -> list[tuple[str, list[Figure]]]:
+        """Текст и растры по страницам. Для не-PDF — одна условная страница."""
         if not blob.startswith(b"%PDF"):
-            return []
+            return [(blob.decode("utf-8", errors="replace"), [])]
         try:
             import io
 
             from pypdf import PdfReader
-        except ImportError:                                # pragma: no cover
-            return []
-        out: list[Figure] = []
-        reader = PdfReader(io.BytesIO(blob))
-        for page in reader.pages:
-            try:
-                images = list(page.images)
-            except Exception:                              # pragma: no cover
-                continue                                   # битое вложение — не повод терять таблицу
-            for im in images:
-                try:
-                    data = im.data
-                    w, h = im.image.width, im.image.height
-                except Exception:                          # pragma: no cover
-                    continue      # без Pillow размеров нет; таблицу это не рушит
-                kind = classify_figure(w, h)
-                if kind == "decor":
-                    continue
-                mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
-                out.append(Figure(name=im.name, mime=mime, width=w, height=h,
-                                  kind=kind, data=data))
+        except ImportError as e:                           # pragma: no cover
+            raise ValueError("для разбора PDF нужен pypdf") from e
+        out: list[tuple[str, list[Figure]]] = []
+        for page in PdfReader(io.BytesIO(blob)).pages:
+            out.append(((page.extract_text() or ""), self._page_figures(page)))
         return out
+
+    @staticmethod
+    def _page_figures(page) -> list[Figure]:
+        try:
+            images = list(page.images)
+        except Exception:                                  # pragma: no cover
+            return []            # битое вложение — не повод терять таблицу
+        out: list[Figure] = []
+        for im in images:
+            try:
+                data = im.data
+                w, h = im.image.width, im.image.height
+            except Exception:                              # pragma: no cover
+                continue          # без Pillow размеров нет; таблицу это не рушит
+            kind = classify_figure(w, h)
+            if kind == "decor":
+                continue
+            mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
+            out.append(Figure(name=im.name, mime=mime, width=w, height=h,
+                              kind=kind, data=data))
+        return out
+
 
     @staticmethod
     def _condition(text: str) -> str:

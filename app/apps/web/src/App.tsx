@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type Platform, type SessionOut } from "./lib/api";
 import { CrossModalScreen } from "./screens/CrossModal";
 import { Instrument } from "./screens/Instrument";
+import { Montage } from "./screens/Montage";
 import { Overview } from "./screens/Overview";
 import { Params } from "./screens/Params";
 import { Protocol } from "./screens/Protocol";
@@ -9,7 +10,8 @@ import { Repeatability } from "./screens/Repeatability";
 import { Upload } from "./screens/Upload";
 import { SessionView } from "./screens/SessionView";
 
-type Tab = "overview" | "upload" | "compare" | "instrument" | "repeatability" | "protocol" | "params";
+type Tab = "overview" | "upload" | "montage" | "compare" | "instrument"
+         | "repeatability" | "protocol" | "params";
 type Theme = "auto" | "light" | "dark";
 
 /** short — подпись для нижней панели телефона: семь полных названий туда
@@ -17,6 +19,7 @@ type Theme = "auto" | "light" | "dark";
 const TABS: { id: Tab; label: string; short: string }[] = [
   { id: "overview", label: "Обзор", short: "Обзор" },
   { id: "upload", label: "Загрузка", short: "Файлы" },
+  { id: "montage", label: "Монтаж ЭМГ", short: "ЭМГ" },
   { id: "compare", label: "Сравнение", short: "Пробы" },
   { id: "instrument", label: "Приборы", short: "Приборы" },
   { id: "repeatability", label: "Повторяемость", short: "Повтор" },
@@ -113,6 +116,8 @@ export default function App() {
           <Overview platform={platform} onOpen={setSession} />
         ) : tab === "upload" ? (
           <Upload sessions={sessions} onDone={reload} />
+        ) : tab === "montage" ? (
+          <Montage sessions={sessions} />
         ) : tab === "compare" ? (
           <CrossModalScreen sessions={sessions} />
         ) : tab === "instrument" ? (

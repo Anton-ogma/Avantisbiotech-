@@ -152,11 +152,9 @@ SESSION = {
 }
 
 
-@pytest.mark.asyncio
-async def test_uploaded_pdf_exposes_figures(client):
-    """Сквозь весь путь: загрузка PDF → хранение → выдача с data:-URI."""
-    s = (await client.post("/sessions", json=SESSION, headers=OPER)).json()
-    plan = await client.post(f"/sessions/{s['id']}/plan", headers=OPER, json={
+async def _approve_plan(client, session_id: str):
+    """Утверждённый план — предусловие любой пробы (Р-29)."""
+    return await client.post(f"/sessions/{session_id}/plan", headers=OPER, json={
         "probes": [
             {"probe_code": "MAND_NEUTRAL_WITH_APPARATUS", "position": 0},
             {"probe_code": "MAND_CLENCH", "position": 1},
@@ -165,6 +163,13 @@ async def test_uploaded_pdf_exposes_figures(client):
         ],
         "apply_randomization": False,
     })
+
+
+@pytest.mark.asyncio
+async def test_uploaded_pdf_exposes_figures(client):
+    """Сквозь весь путь: загрузка PDF → хранение → выдача с data:-URI."""
+    s = (await client.post("/sessions", json=SESSION, headers=OPER)).json()
+    plan = await _approve_plan(client, s["id"])
     assert plan.status_code == 200, plan.text
     made = await client.post(f"/sessions/{s['id']}/trials", headers=OPER, json={
         "probe_code": "MAND_CLENCH", "role": "diagnostic", "mode": "dynamic",
@@ -191,3 +196,80 @@ async def test_uploaded_pdf_exposes_figures(client):
     assert raw.status_code == 200
     assert raw.content.startswith(b"\xff\xd8")
     assert "immutable" in raw.headers["cache-control"]
+
+
+@pytest.mark.asyncio
+async def test_manual_upload_refuses_multi_section_file(client):
+    """QA (Р-43): ручная загрузка привязывает файл к ОДНОЙ пробе.
+
+    Многораздельный отчёт сюда класть нельзя: разделы сняты при разных
+    условиях, и сложенные в одну пробу они смешаются молча. Отказ с причиной
+    лучше правдоподобного результата.
+    """
+    one = (
+        "Parameter_F4_Dynamic4D - 04.03.2025 (18:27)\n"
+        "лев окк\n"
+        "ПАРАМЕТР ЗНАЧЕНИЕ ДИАПАЗОН ДВИЖЕНИЯ\n"
+        "Ротация таза 5° Прав. 1° Лев. - 7° Прав.\n"
+    )
+    two = one.replace("лев окк", "прав окк").replace("Ротация таза 5°", "Ротация таза 9°")
+
+    s = (await client.post("/sessions", json=SESSION, headers=OPER)).json()
+    plan = await _approve_plan(client, s["id"])
+    assert plan.status_code == 200, plan.text
+    made = await client.post(f"/sessions/{s['id']}/trials", headers=OPER, json={
+        "probe_code": "MAND_CLENCH", "role": "diagnostic", "mode": "dynamic",
+        "position": 1, "t_offset_sec": 120.0, "settle_sec_actual": 60,
+        "effort_achieved_pct": 80.0,
+    })
+    assert made.status_code == 201, made.text
+    trial = made.json()
+    r = await client.post(
+        f"/sessions/{s['id']}/imports?trial_id={trial['id']}", headers=OPER,
+        files={"file": ("protocol.txt", (one + "\n" + two).encode(), "text/plain")},
+    )
+    assert r.status_code == 409, r.text
+    assert "разделов" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_broken_pdf_reports_a_human_reason(client):
+    """Недокачанный отчёт — частый случай; «PdfStreamError» оператору не адресат."""
+    s = (await client.post("/sessions", json=SESSION, headers=OPER)).json()
+    assert (await _approve_plan(client, s["id"])).status_code == 200
+    broken = build_pdf(SAMPLE_IMAGES)[:1500]
+    r = await client.post(f"/sessions/{s['id']}/auto-ingest", headers=OPER,
+                          files={"files": ("broken.pdf", broken, "application/pdf")})
+    assert r.status_code == 200
+    outcome = r.json()["files"][0]
+    assert outcome["status"] in ("failed", "unrecognized")
+    if outcome["status"] == "failed":
+        assert "повреждён" in outcome["reason"]
+
+
+@pytest.mark.asyncio
+async def test_filename_never_reaches_the_audit_log(client):
+    """Р-9: клиника называет выгрузки по пациенту — ПДн не должны осесть в журнале."""
+    from sqlalchemy import select
+
+    import apps.api.db as db_mod
+    from apps.api.models import AuditLog
+
+    s = (await client.post("/sessions", json=SESSION, headers=OPER)).json()
+    assert (await _approve_plan(client, s["id"])).status_code == 200
+    made = await client.post(f"/sessions/{s['id']}/trials", headers=OPER, json={
+        "probe_code": "MAND_CLENCH", "role": "diagnostic", "mode": "static",
+        "position": 1, "t_offset_sec": 120.0, "settle_sec_actual": 60,
+        "effort_achieved_pct": 80.0,
+    })
+    assert made.status_code == 201, made.text
+    trial = made.json()
+    await client.post(
+        f"/sessions/{s['id']}/imports?trial_id={trial['id']}", headers=OPER,
+        files={"file": ("Петрова Жанна.csv", "ерунда;не формат\n1;2\n".encode(), "text/csv")},
+    )
+    async with db_mod.sessionmaker()() as db:
+        rows = (await db.execute(select(AuditLog))).scalars().all()
+    dump = repr([r.payload for r in rows])
+    assert "Петрова" not in dump
+    assert any("suffix" in (r.payload or {}) for r in rows)

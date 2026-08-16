@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -15,6 +16,23 @@ from ..models import Measurement, RawImport, Trial
 from ..security import Principal, audit, current_principal, require
 from ..services.figures import store_figures
 from ..services.session_service import load_session, materialize_param_values
+
+
+def _readable(exc: Exception) -> str:
+    """Причина отказа словами оператора, а не именем класса исключения.
+
+    «PdfStreamError: Stream has ended unexpectedly» ничего не говорит человеку,
+    который только что перетащил недокачанный отчёт. Класс исключения при этом
+    сохраняется в хвосте: разбирать инцидент по журналу всё равно придётся.
+    """
+    known = {
+        "PdfStreamError": "файл повреждён или скачан не полностью",
+        "PdfReadError": "PDF не читается: возможно, он зашифрован или повреждён",
+        "UnicodeDecodeError": "кодировка файла не распознана",
+        "EmptyFileError": "файл пуст",
+    }
+    hint = known.get(type(exc).__name__)
+    return f"{hint} ({type(exc).__name__})" if hint else f"{type(exc).__name__}: {exc}"
 
 router = APIRouter(prefix="/sessions", tags=["imports"])
 
@@ -70,17 +88,35 @@ async def upload(
         # unrecognized и причиной, а не исчезает.
         record.status, record.reason = "unrecognized", str(e)
         await db.flush()
+        # Имя файла в журнал не пишется: клиника называет выгрузки по пациенту
+        # («Петрова Жанна.pdf»), и ПДн попали бы в постоянное хранилище модуля
+        # вопреки Р-9 и ФЗ-152. Для разбора инцидента достаточно расширения и
+        # размера — сам файл лежит по хешу.
         await audit(db, principal, "import.unrecognized", "raw_import", str(record.id),
-                    payload={"filename": file.filename})
+                    payload={"suffix": Path(file.filename or "").suffix.lower(),
+                             "bytes": len(blob)})
         return ImportOut(id=record.id, file_hash=digest, modality=None, format_id=None,
                          source=source, status="unrecognized", reason=record.reason,  # type: ignore[arg-type]
                          created_at=record.created_at, measurements=0)
     except Exception as e:                                  # noqa: BLE001
-        record.status, record.reason = "failed", f"{type(e).__name__}: {e}"
+        record.status, record.reason = "failed", _readable(e)
         await db.flush()
         return ImportOut(id=record.id, file_hash=digest, modality=None, format_id=None,
                          source=source, status="failed", reason=record.reason,  # type: ignore[arg-type]
                          created_at=record.created_at, measurements=0)
+
+    if len(results) > 1:
+        # Многораздельный отчёт: одно условие на раздел. Ручная загрузка
+        # привязывает файл к ОДНОЙ пробе, и сложить сюда все разделы значило бы
+        # смешать условия в одной пробе — молча и правдоподобно. Такой файл
+        # разбирает автоподгрузка: она раскладывает разделы по пробам сама.
+        record.status, record.reason = "rejected", (
+            f"в файле {len(results)} разделов с разными условиями "
+            f"({', '.join(sorted({r.raw_row.get('condition_label', '?') for r in results}))}); "
+            "ручная привязка к одной пробе смешала бы их — загрузите через автоподгрузку"
+        )
+        await db.flush()
+        raise HTTPException(status.HTTP_409_CONFLICT, record.reason)
 
     record.modality, record.format_id = parser.modality, parser.format_id
     record.device_sw_version = results[0].device_sw_version if results else None

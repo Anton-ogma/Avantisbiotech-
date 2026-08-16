@@ -1,0 +1,246 @@
+# Каталог мышц поверхностной ЭМГ (Р-42).
+#
+# Единственный источник правды о том, какие мышцы платформа умеет называть.
+# Из него порождаются коды реестра (EMG_RMS_<код>_L/R, EMG_ASYM_<код>),
+# принадлежность области тела для обзора §14.3 и распознавание меток каналов
+# при импорте. Раньше эти три вещи жили порознь и расходились.
+#
+# ЧТО ЗДЕСЬ НЕ РЕШАЕТСЯ. Каталог говорит, какие мышцы БЫВАЮТ, а не какие
+# записаны. Записанные каналы задаёт монтаж сессии (montages.yaml + ручная
+# пропись): без него неподписанный канал «CH3» остаётся неопознанным, и
+# догадываться, что это за мышца, платформа не имеет права.
+#
+# surface: false — мышца в каталоге есть, но поверхностными электродами
+# не снимается (глубокая или закрытая другими). Такой код в монтаж не
+# допускается: подписать канал «латеральная крыловидная» значило бы объявить
+# измеренным то, что этим методом не измеряется.
+version: "2026.1"
+muscles:
+  # ── Жевательные ───────────────────────────────────────────────────────────
+  - code: MASSETER
+    label_ru: "Жевательная"
+    latin: "m. masseter"
+    region: masticatory
+    aliases: ["mass", "masseter", "жев", "жевательная", "массетер"]
+  - code: TEMPORALIS
+    label_ru: "Височная (передний пучок)"
+    latin: "m. temporalis, pars anterior"
+    region: masticatory
+    aliases: ["temp", "temporalis", "вис", "височная", "темпоралис"]
+  - code: DIGASTRIC
+    label_ru: "Двубрюшная (переднее брюшко)"
+    latin: "m. digastricus, venter anterior"
+    region: masticatory
+    aliases: ["dig", "digastric", "двубрюшная", "надподъязычные"]
+  - code: LATERAL_PTERYGOID
+    label_ru: "Латеральная крыловидная"
+    latin: "m. pterygoideus lateralis"
+    region: masticatory
+    surface: false
+    note: "внутрикостно закрыта; поверхностными электродами не снимается"
+    aliases: ["крыловидная", "pterygoid"]
+
+  # ── Шея ───────────────────────────────────────────────────────────────────
+  - code: SCM
+    label_ru: "Грудино-ключично-сосцевидная"
+    latin: "m. sternocleidomastoideus"
+    region: neck
+    aliases: ["scm", "гкс", "sternocleidomastoid", "кивательная"]
+  - code: SPLENIUS_CAPITIS
+    label_ru: "Ременная мышца головы"
+    latin: "m. splenius capitis"
+    region: neck
+    aliases: ["spl", "splenius", "ременная"]
+  - code: SCALENUS_ANTERIOR
+    label_ru: "Передняя лестничная"
+    latin: "m. scalenus anterior"
+    region: neck
+    aliases: ["scal", "scalene", "лестничная"]
+  - code: LEVATOR_SCAPULAE
+    label_ru: "Мышца, поднимающая лопатку"
+    latin: "m. levator scapulae"
+    region: neck
+    aliases: ["ls", "levator", "поднимающая лопатку"]
+  - code: TRAPEZIUS
+    label_ru: "Трапециевидная, верхняя часть"
+    latin: "m. trapezius, pars descendens"
+    region: neck
+    aliases: ["trap", "trapezius", "трап", "трапеция", "трапециевидная верх",
+              "upper trapezius", "trap upper"]
+
+  # ── Плечевой пояс ─────────────────────────────────────────────────────────
+  - code: TRAPEZIUS_MIDDLE
+    label_ru: "Трапециевидная, средняя часть"
+    latin: "m. trapezius, pars transversa"
+    region: shoulder
+    aliases: ["trap mid", "middle trapezius", "трапеция средняя"]
+  - code: TRAPEZIUS_LOWER
+    label_ru: "Трапециевидная, нижняя часть"
+    latin: "m. trapezius, pars ascendens"
+    region: shoulder
+    aliases: ["trap low", "lower trapezius", "трапеция нижняя"]
+  - code: RHOMBOID
+    label_ru: "Ромбовидная"
+    latin: "m. rhomboideus major"
+    region: shoulder
+    aliases: ["rhomb", "rhomboid", "ромбовидная"]
+  - code: SERRATUS_ANTERIOR
+    label_ru: "Передняя зубчатая"
+    latin: "m. serratus anterior"
+    region: shoulder
+    aliases: ["sa", "serratus", "зубчатая"]
+  - code: LATISSIMUS_DORSI
+    label_ru: "Широчайшая мышца спины"
+    latin: "m. latissimus dorsi"
+    region: shoulder
+    aliases: ["lat", "latissimus", "широчайшая"]
+  - code: INFRASPINATUS
+    label_ru: "Подостная"
+    latin: "m. infraspinatus"
+    region: shoulder
+    aliases: ["infra", "infraspinatus", "подостная"]
+  - code: DELTOID
+    label_ru: "Дельтовидная (средний пучок)"
+    latin: "m. deltoideus, pars acromialis"
+    region: shoulder
+    aliases: ["delt", "deltoid", "дельта", "дельтовидная"]
+
+  # ── Спина ─────────────────────────────────────────────────────────────────
+  - code: ERECTOR_SPINAE
+    label_ru: "Выпрямитель спины, поясничный уровень"
+    latin: "m. erector spinae, pars lumbalis"
+    region: spine_sagittal
+    aliases: ["es", "erector", "erector spinae", "выпрямитель", "разгибатель спины",
+              "es l3", "es lumbar"]
+  - code: ERECTOR_SPINAE_THORACIC
+    label_ru: "Выпрямитель спины, грудной уровень"
+    latin: "m. erector spinae, pars thoracica"
+    region: spine_sagittal
+    aliases: ["es th", "es thoracic", "выпрямитель грудной", "es t9"]
+  - code: MULTIFIDUS
+    label_ru: "Многораздельная, поясничный уровень"
+    latin: "mm. multifidi lumbales"
+    region: spine_sagittal
+    aliases: ["mf", "multifidus", "многораздельная"]
+  - code: QUADRATUS_LUMBORUM
+    label_ru: "Квадратная мышца поясницы"
+    latin: "m. quadratus lumborum"
+    region: pelvis
+    aliases: ["ql", "quadratus", "квадратная поясницы", "кв.пояс"]
+
+  # ── Живот ─────────────────────────────────────────────────────────────────
+  - code: RECTUS_ABDOMINIS
+    label_ru: "Прямая мышца живота"
+    latin: "m. rectus abdominis"
+    region: abdomen
+    aliases: ["ra", "rectus abdominis", "прямая живота", "пресс"]
+  - code: OBLIQUUS_EXTERNUS
+    label_ru: "Наружная косая живота"
+    latin: "m. obliquus externus abdominis"
+    region: abdomen
+    aliases: ["oe", "external oblique", "наружная косая"]
+  - code: OBLIQUUS_INTERNUS
+    label_ru: "Внутренняя косая живота"
+    latin: "m. obliquus internus abdominis"
+    region: abdomen
+    aliases: ["oi", "internal oblique", "внутренняя косая"]
+  - code: TRANSVERSUS_ABDOMINIS
+    label_ru: "Поперечная мышца живота"
+    latin: "m. transversus abdominis"
+    region: abdomen
+    surface: false
+    note: "лежит под косыми; поверхностный электрод снимает их, а не её"
+    aliases: ["ta abd", "поперечная живота"]
+
+  # ── Таз и бедро ───────────────────────────────────────────────────────────
+  - code: GLUTEUS_MAXIMUS
+    label_ru: "Большая ягодичная"
+    latin: "m. gluteus maximus"
+    region: pelvis
+    aliases: ["gm", "gluteus", "gluteus maximus", "большая ягодичная", "ягод"]
+  - code: GLUTEUS_MEDIUS
+    label_ru: "Средняя ягодичная"
+    latin: "m. gluteus medius"
+    region: pelvis
+    aliases: ["gmed", "gluteus medius", "средняя ягодичная"]
+  - code: TENSOR_FASCIAE_LATAE
+    label_ru: "Напрягатель широкой фасции"
+    latin: "m. tensor fasciae latae"
+    region: pelvis
+    aliases: ["tfl", "напрягатель фасции"]
+  - code: ADDUCTOR_LONGUS
+    label_ru: "Длинная приводящая"
+    latin: "m. adductor longus"
+    region: thigh
+    aliases: ["add", "adductor", "приводящая"]
+  - code: ILIOPSOAS
+    label_ru: "Подвздошно-поясничная"
+    latin: "m. iliopsoas"
+    region: pelvis
+    surface: false
+    note: "глубокая; поверхностная ЭМГ снимает с неё только наводку соседей"
+    aliases: ["psoas", "подвздошно-поясничная"]
+
+  # ── Бедро ─────────────────────────────────────────────────────────────────
+  - code: RECTUS_FEMORIS
+    label_ru: "Прямая мышца бедра"
+    latin: "m. rectus femoris"
+    region: thigh
+    aliases: ["rf", "rectus femoris", "прямая бедра", "пр.бедра"]
+  - code: VASTUS_LATERALIS
+    label_ru: "Латеральная широкая бедра"
+    latin: "m. vastus lateralis"
+    region: thigh
+    aliases: ["vl", "vastus lateralis", "латеральная широкая"]
+  - code: VASTUS_MEDIALIS
+    label_ru: "Медиальная широкая бедра"
+    latin: "m. vastus medialis"
+    region: thigh
+    aliases: ["vm", "vastus medialis", "медиальная широкая"]
+  - code: BICEPS_FEMORIS
+    label_ru: "Двуглавая мышца бедра"
+    latin: "m. biceps femoris"
+    region: thigh
+    aliases: ["bf", "biceps femoris", "двуглавая бедра"]
+  - code: SEMITENDINOSUS
+    label_ru: "Полусухожильная"
+    latin: "m. semitendinosus"
+    region: thigh
+    aliases: ["st", "semitendinosus", "полусухожильная"]
+
+  # ── Голень и стопа ────────────────────────────────────────────────────────
+  - code: TIBIALIS_ANTERIOR
+    label_ru: "Передняя большеберцовая"
+    latin: "m. tibialis anterior"
+    region: shank
+    aliases: ["ta", "tibialis", "tibialis anterior", "передняя большеберцовая",
+              "перед.б/б"]
+  - code: GASTROCNEMIUS
+    label_ru: "Икроножная (общий отвод)"
+    latin: "m. gastrocnemius"
+    region: shank
+    note: >-
+      Общий отвод. Если монтаж различает головки — берите GASTROCNEMIUS_MEDIALIS
+      и GASTROCNEMIUS_LATERALIS. Смешивать нельзя: это разные каналы, и общий
+      отвод не равен ни одной из головок.
+    aliases: ["gs", "gastro", "gastrocnemius", "икроножная", "икр"]
+  - code: GASTROCNEMIUS_MEDIALIS
+    label_ru: "Икроножная, медиальная головка"
+    latin: "m. gastrocnemius, caput mediale"
+    region: shank
+    aliases: ["gm med", "gastroc med", "medial gastrocnemius", "икроножная медиальная"]
+  - code: GASTROCNEMIUS_LATERALIS
+    label_ru: "Икроножная, латеральная головка"
+    latin: "m. gastrocnemius, caput laterale"
+    region: shank
+    aliases: ["gm lat", "gastroc lat", "lateral gastrocnemius", "икроножная латеральная"]
+  - code: SOLEUS
+    label_ru: "Камбаловидная"
+    latin: "m. soleus"
+    region: shank
+    aliases: ["sol", "soleus", "камбаловидная"]
+  - code: PERONEUS_LONGUS
+    label_ru: "Длинная малоберцовая"
+    latin: "m. peroneus longus"
+    region: shank
+    aliases: ["pl", "peroneus", "малоберцовая"]

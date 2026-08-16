@@ -1,0 +1,130 @@
+# Типовые монтажи ЭМГ — шаблоны записи (Р-42).
+#
+# Монтаж отвечает на вопрос «какие каналы записаны и что к чему приклеено».
+# Каталог мышц (muscles.yaml) говорит, что БЫВАЕТ; монтаж — что БЫЛО.
+#
+# Шаблон — заготовка, а не предписание. Оператор берёт ближайший и правит:
+# добавляет канал, убирает ненужный, вписывает метку, которой миограф
+# подписывает провод. Правленый монтаж хранится в сессии — именно он, а не
+# шаблон, участвует в разборе файла.
+#
+# ЗАЧЕМ ВООБЩЕ. Миографы подписывают каналы как угодно: «CH1…CH8», «EMG 3»,
+# внутренними номерами. Без монтажа такой столбец не опознаётся, и данные либо
+# теряются, либо — что хуже — приписываются мышце по догадке. Монтаж делает
+# сопоставление явным и записанным: кто, когда и как назначил канал.
+#
+# side: both — канал ставится на обе стороны (два физических отвода);
+#       L или R — только на указанную. Односторонний монтаж законен: так
+#       пишут, когда интересует сторона поражения.
+version: "2026.1"
+montages:
+  - code: TMJ_PANEL
+    label_ru: "Панель ВНЧС"
+    purpose: "жевательная проба: сжатие, латеротрузии, протрузия"
+    channels:
+      - { muscle: MASSETER, side: both }
+      - { muscle: TEMPORALIS, side: both }
+      - { muscle: DIGASTRIC, side: both }
+      - { muscle: SCM, side: both }
+
+  - code: CERVICAL
+    label_ru: "Шейно-плечевая"
+    purpose: "положение головы, шейный отдел, верхний плечевой пояс"
+    channels:
+      - { muscle: SCM, side: both }
+      - { muscle: SPLENIUS_CAPITIS, side: both }
+      - { muscle: TRAPEZIUS, side: both }
+      - { muscle: LEVATOR_SCAPULAE, side: both }
+
+  - code: SCAPULAR
+    label_ru: "Лопаточно-плечевая"
+    purpose: "стабилизация лопатки, плечевой пояс"
+    channels:
+      - { muscle: TRAPEZIUS, side: both }
+      - { muscle: TRAPEZIUS_MIDDLE, side: both }
+      - { muscle: TRAPEZIUS_LOWER, side: both }
+      - { muscle: SERRATUS_ANTERIOR, side: both }
+      - { muscle: RHOMBOID, side: both }
+
+  - code: TRUNK_EXTENSORS
+    label_ru: "Разгибатели туловища"
+    purpose: "спина: грудной и поясничный уровни, многораздельные"
+    channels:
+      - { muscle: ERECTOR_SPINAE_THORACIC, side: both }
+      - { muscle: ERECTOR_SPINAE, side: both }
+      - { muscle: MULTIFIDUS, side: both }
+      - { muscle: QUADRATUS_LUMBORUM, side: both }
+
+  - code: TRUNK_FLEXORS
+    label_ru: "Сгибатели туловища"
+    purpose: "передняя стенка живота, косые"
+    channels:
+      - { muscle: RECTUS_ABDOMINIS, side: both }
+      - { muscle: OBLIQUUS_EXTERNUS, side: both }
+      - { muscle: OBLIQUUS_INTERNUS, side: both }
+
+  - code: LUMBOPELVIC
+    label_ru: "Пояснично-тазовая"
+    purpose: "таз: стабилизация, перекос, опора"
+    channels:
+      - { muscle: ERECTOR_SPINAE, side: both }
+      - { muscle: QUADRATUS_LUMBORUM, side: both }
+      - { muscle: GLUTEUS_MAXIMUS, side: both }
+      - { muscle: GLUTEUS_MEDIUS, side: both }
+      - { muscle: TENSOR_FASCIAE_LATAE, side: both }
+
+  - code: THIGH
+    label_ru: "Бедро"
+    purpose: "четырёхглавая и задняя группа, ось ноги"
+    channels:
+      - { muscle: RECTUS_FEMORIS, side: both }
+      - { muscle: VASTUS_LATERALIS, side: both }
+      - { muscle: VASTUS_MEDIALIS, side: both }
+      - { muscle: BICEPS_FEMORIS, side: both }
+      - { muscle: SEMITENDINOSUS, side: both }
+
+  - code: SHANK_FOOT
+    label_ru: "Голень и стопа"
+    purpose: "опора, равновесие, подометрические пробы"
+    channels:
+      - { muscle: TIBIALIS_ANTERIOR, side: both }
+      - { muscle: GASTROCNEMIUS_MEDIALIS, side: both }
+      - { muscle: GASTROCNEMIUS_LATERALIS, side: both }
+      - { muscle: SOLEUS, side: both }
+      - { muscle: PERONEUS_LONGUS, side: both }
+
+  - code: POSTURAL_FULL
+    label_ru: "Постуральная цепь целиком"
+    purpose: >-
+      сквозная проба «от челюсти до стоп»: по одному представителю на каждую
+      область §14.3. Каналов много — 20 отводов; на большинстве миографов это
+      две записи подряд, и метка условия должна быть одинаковой в обеих.
+    channels:
+      - { muscle: MASSETER, side: both }
+      - { muscle: TEMPORALIS, side: both }
+      - { muscle: SCM, side: both }
+      - { muscle: TRAPEZIUS, side: both }
+      - { muscle: ERECTOR_SPINAE, side: both }
+      - { muscle: QUADRATUS_LUMBORUM, side: both }
+      - { muscle: GLUTEUS_MAXIMUS, side: both }
+      - { muscle: RECTUS_FEMORIS, side: both }
+      - { muscle: TIBIALIS_ANTERIOR, side: both }
+      - { muscle: GASTROCNEMIUS, side: both }
+
+  - code: LEGACY_10CH
+    label_ru: "Прежний десятиканальный (совместимость)"
+    purpose: >-
+      монтаж, на котором собраны уже загруженные сессии. Оставлен неизменным
+      специально: сменить его состав задним числом значило бы объявить, что
+      старые записи сделаны не тем, чем сделаны.
+    channels:
+      - { muscle: MASSETER, side: both }
+      - { muscle: TEMPORALIS, side: both }
+      - { muscle: SCM, side: both }
+      - { muscle: TRAPEZIUS, side: both }
+      - { muscle: ERECTOR_SPINAE, side: both }
+      - { muscle: QUADRATUS_LUMBORUM, side: both }
+      - { muscle: GLUTEUS_MAXIMUS, side: both }
+      - { muscle: RECTUS_FEMORIS, side: both }
+      - { muscle: TIBIALIS_ANTERIOR, side: both }
+      - { muscle: GASTROCNEMIUS, side: both }

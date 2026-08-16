@@ -11,22 +11,15 @@ MUST §9.8: амплитуды в мкВ сравнимы ТОЛЬКО внут�
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:                       # только для подсказки типа
+    from domain.montage import ChannelMap
+
+from domain.config import load_muscles
 
 from .base import ParseResult, parse_number, read_rows, register
 
-#: Сокращение вендора → канонический код мышцы. Словарь клиники, не догадка.
-MUSCLE_ALIASES: dict[str, str] = {
-    "mass": "MASSETER", "masseter": "MASSETER", "жев": "MASSETER", "жевательная": "MASSETER",
-    "temp": "TEMPORALIS", "temporalis": "TEMPORALIS", "вис": "TEMPORALIS", "височная": "TEMPORALIS",
-    "scm": "SCM", "гкс": "SCM",
-    "trap": "TRAPEZIUS", "trapezius": "TRAPEZIUS", "трап": "TRAPEZIUS",
-    "es": "ERECTOR_SPINAE", "erector": "ERECTOR_SPINAE", "erector spinae": "ERECTOR_SPINAE",
-    "ql": "QUADRATUS_LUMBORUM", "quadratus": "QUADRATUS_LUMBORUM",
-    "gm": "GLUTEUS_MAXIMUS", "gluteus": "GLUTEUS_MAXIMUS",
-    "rf": "RECTUS_FEMORIS", "rectus femoris": "RECTUS_FEMORIS",
-    "ta": "TIBIALIS_ANTERIOR", "tibialis": "TIBIALIS_ANTERIOR",
-    "gs": "GASTROCNEMIUS", "gastro": "GASTROCNEMIUS", "gastrocnemius": "GASTROCNEMIUS",
-}
 SIDE_ALIASES: dict[str, str] = {
     "l": "L", "left": "L", "лев": "L", "слева": "L", "л": "L",
     "r": "R", "right": "R", "прав": "R", "справа": "R", "п": "R",
@@ -36,8 +29,22 @@ CONDITION_KEYS = ("Condition", "Probe", "Проба", "Условие", "Test")
 MARKERS = ("RMS", "µV", "uV", "мкВ", "EMG", "ЭМГ")
 
 
-def resolve_channel(label: str) -> tuple[str, str] | None:
-    """«MASS_L», «Masseter left», «жев слева» → ('MASSETER', 'L')."""
+def resolve_channel(label: str, montage: "ChannelMap | None" = None) -> tuple[str, str] | None:
+    """«MASS_L», «Masseter left», «жев слева» → ('MASSETER', 'L').
+
+    Каталог мышц — единственный словарь (Р-42): раньше алиасы жили здесь
+    отдельным dict и расходились с реестром при каждом пополнении.
+
+    `montage` — ручная пропись каналов сессии. Она проверяется ПЕРВОЙ и
+    решает случай, ради которого затевалась: миограф подписывает провода
+    «CH1…CH8», и по имени столбца мышцу не восстановить никак. Догадываться
+    платформа не имеет права — либо метка узнаётся, либо канал прописан.
+    """
+    if montage:
+        direct = montage.get(label.strip().lower())
+        if direct is not None:
+            return direct
+    catalog = load_muscles()
     text = label.strip().lower().replace("-", "_")
     text = re.sub(r"\b(rms|emg|эмг|мкв|uv|µv)\b", " ", text)
     parts = [p for p in re.split(r"[\s_;,]+", text) if p]
@@ -49,11 +56,12 @@ def resolve_channel(label: str) -> tuple[str, str] | None:
             side = SIDE_ALIASES[p]
             parts.remove(p)
             break
-    stem = " ".join(parts).strip()
-    muscle = MUSCLE_ALIASES.get(stem) or MUSCLE_ALIASES.get(parts[0] if parts else "")
-    if muscle is None or side is None:
+    if side is None:
         return None
-    return muscle, side
+    muscle = catalog.by_alias(" ".join(parts)) or catalog.by_alias(parts[0])
+    if muscle is None or not muscle.surface:
+        return None
+    return muscle.code, side
 
 
 @register
@@ -61,18 +69,22 @@ class EmgCsvParser:
     format_id = "emg-csv-v1"
     modality = "emg"
 
-    def detect(self, blob: bytes) -> bool:
+    def detect(self, blob: bytes, montage: "ChannelMap | None" = None) -> bool:
         """Признак формата — РАСПОЗНАННЫЕ КАНАЛЫ, а не слово RMS в заголовке.
 
         Слово «rms» встречается и в формометрии («Lateral Deviation rms»),
         поэтому маркер сам по себе перехватывал чужой файл. Канал же требует
         и мышцу, и сторону одновременно — совпасть случайно почти невозможно.
+
+        `montage` передаётся только на ВТОРОМ заходе, когда файл не опознал
+        никто (Р-42). Иначе прописанные метки вроде «CH1» перетягивали бы на
+        себя посторонние таблицы: две колонки с такими именами есть где угодно.
         """
         try:
             headers, rows = read_rows(blob)
         except Exception:
             return False
-        if sum(1 for h in headers if resolve_channel(h)) >= 2:
+        if sum(1 for h in headers if resolve_channel(h, montage)) >= 2:
             return True
         # длинная раскладка: столбцы «Мышца / Сторона / RMS»
         lowered = {h.strip().lower() for h in headers}
@@ -86,16 +98,18 @@ class EmgCsvParser:
             for row in rows[:5]
         )
 
-    def parse(self, blob: bytes) -> list[ParseResult]:
+    def parse(self, blob: bytes, montage: "ChannelMap | None" = None) -> list[ParseResult]:
         headers, rows = read_rows(blob)
         long_form = any(h.lower() in ("muscle", "мышца", "channel", "канал") for h in headers)
-        return [self._long(rows)] if long_form else [self._wide(row) for row in rows]
+        if long_form:
+            return [self._long(rows, montage)]
+        return [self._wide(row, montage) for row in rows]
 
-    def _wide(self, row: dict[str, str]) -> ParseResult:
+    def _wide(self, row: dict[str, str], montage: "ChannelMap | None" = None) -> ParseResult:
         params: dict[str, float] = {}
         unmapped: dict[str, str] = {}
         for header, raw in row.items():
-            resolved = resolve_channel(header)
+            resolved = resolve_channel(header, montage)
             if resolved is None:
                 if raw:
                     unmapped[header] = raw
@@ -108,7 +122,8 @@ class EmgCsvParser:
         condition = next((row[k] for k in CONDITION_KEYS if row.get(k)), "")
         return self._finish(params, unmapped, condition, row)
 
-    def _long(self, rows: list[dict[str, str]]) -> ParseResult:
+    def _long(self, rows: list[dict[str, str]],
+              montage: "ChannelMap | None" = None) -> ParseResult:
         params: dict[str, float] = {}
         unmapped: dict[str, str] = {}
         condition = ""
@@ -118,7 +133,7 @@ class EmgCsvParser:
             value = next((parse_number(row[k]) for k in ("RMS", "RMS_uV", "Value", "Значение")
                           if row.get(k)), None)
             condition = condition or next((row[k] for k in CONDITION_KEYS if row.get(k)), "")
-            resolved = resolve_channel(f"{muscle_raw} {side_raw}")
+            resolved = resolve_channel(f"{muscle_raw} {side_raw}", montage)
             if resolved is None or value is None:
                 if muscle_raw:
                     unmapped[muscle_raw] = side_raw

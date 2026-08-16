@@ -65,6 +65,7 @@ async def build() -> None:
             return snap[path]
 
         for path in ("/platform", "/params", "/sessions",
+                     "/emg/muscles", "/emg/montages",
                      "/research/repeatability", "/research/progress"):
             await grab(path)
 
@@ -78,6 +79,25 @@ async def build() -> None:
         elif pdf:
             print(f"  ⚠ протокол {pdf} не найден — снимок без иллюстраций")
 
+        # Демонстрационный монтаж на первой сессии: экран монтажа в снимке
+        # должен показывать заполненный случай, а не пустую форму.
+        first = ((await c.get("/sessions", headers=headers)).json() or [None])[0]
+        if first:
+            await c.put(f"/sessions/{first['id']}/montage", headers=headers, json={
+                "template": "TMJ_PANEL",
+                "channels": [
+                    {"label": "CH1", "muscle": "MASSETER", "side": "L"},
+                    {"label": "CH2", "muscle": "MASSETER", "side": "R"},
+                    {"label": "CH3", "muscle": "TEMPORALIS", "side": "L"},
+                    {"label": "CH4", "muscle": "TEMPORALIS", "side": "R"},
+                    {"label": "CH5", "muscle": "SCM", "side": "L"},
+                    {"label": "CH6", "muscle": "SCM", "side": "R"},
+                    {"label": "CH7", "muscle": "TRAPEZIUS", "side": "L"},
+                    {"label": "CH8", "muscle": "TRAPEZIUS", "side": "R"},
+                ],
+                "note": "демонстрационный монтаж: миограф подписывает каналы CH1…CH8",
+            })
+
         sessions = snap.get("/sessions") or []
         for s in sessions:                                      # type: ignore[union-attr]
             sid = s["id"]
@@ -86,7 +106,8 @@ async def build() -> None:
             # столбцы локально. Раскладывать сюда комбинации проб нельзя — их
             # экспоненциально много, и снимок молча ограничил бы сравнение.
             for path in (f"/sessions/{sid}/measurements", f"/sessions/{sid}/crossmodal",
-                         f"/sessions/{sid}/compare", f"/sessions/{sid}/figures"):
+                         f"/sessions/{sid}/compare", f"/sessions/{sid}/figures",
+                         f"/sessions/{sid}/montage"):
                 await grab(path)
             await grab(f"/sessions/{sid}/interim", method="POST")
 

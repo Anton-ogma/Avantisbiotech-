@@ -237,6 +237,13 @@ button.pill {
 }
 button.pill:hover { background: var(--surface-2); }
 button.pill:active { transform: scale(0.96); }
+/* Основное действие экрана: одна кнопка на форму, тот же градиент, что у
+   выбранной вкладки — акцент в интерфейсе один и означает одно. */
+button.pill.primary {
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  border-color: transparent; color: #fff; box-shadow: 0 6px 20px var(--accent-glow);
+}
+button.pill:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
 button.pill[aria-pressed="true"] {
   background: linear-gradient(140deg, var(--accent), var(--accent-2));
   border-color: transparent; color: #fff; box-shadow: 0 6px 20px var(--accent-glow);
@@ -427,3 +434,6 @@ button.pill[aria-pressed="true"] {
 }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Строка монтажа с конфликтом меток: сохранение заблокировано, и видно почему. */
+tr.row-bad td { background: rgba(214, 69, 95, 0.1); }

@@ -15,6 +15,11 @@ export const getActor = () => actor;
 const snapshot = (): Record<string, unknown> | null =>
   (globalThis as any).__DIERS_SNAPSHOT__ ?? null;
 
+/** Страница открыта как автономный снимок: бэкенда нет вовсе.
+ *  Экраны, которые ПИШУТ (загрузка файлов, утверждение плана), обязаны это
+ *  проверять и говорить прямо, а не выдавать сетевую ошибку за отказ прибора. */
+export const isSnapshot = (): boolean => snapshot() !== null;
+
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const snap = snapshot();
   if (snap && path in snap) return snap[path] as T;
@@ -121,16 +126,47 @@ export const api = {
    *  заранее сгенерированных сочетаний и молча ограничивала сравнение. */
   compare: (id: string) => call<CompareOut>(`/sessions/${id}/compare`),
   figures: (id: string) => call<FiguresOut>(`/sessions/${id}/figures`),
+  muscles: () => call<{ version: string; muscles: MuscleInfo[]; note: string }>("/emg/muscles"),
+  montageTemplates: () =>
+    call<{ version: string; montages: MontageTemplate[]; note: string }>("/emg/montages"),
+  sessionMontage: (id: string) =>
+    call<{ session_id: string; montage: MontageOut | null; note?: string }>(
+      `/sessions/${id}/montage`),
+  setMontage: (id: string, body: {
+    template: string | null;
+    channels: { label: string; muscle: string; side: string }[];
+    note: string;
+  }) => call<{ montage: MontageOut; warnings: string[] }>(`/sessions/${id}/montage`, {
+    method: "PUT", body: JSON.stringify(body),
+  }),
   autoIngest: async (id: string, files: File[]) => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));
     const a = getActor();
+    if (isSnapshot()) {
+      throw new Error(
+        "Это автономный снимок приложения: он показывает уже загруженные данные, " +
+        "но принимать файлы ему некуда — бэкенда рядом нет. Загрузка работает в " +
+        "развёрнутом экземпляре (docker compose up).",
+      );
+    }
     const res = await fetch(`${BASE}/sessions/${id}/auto-ingest`, {
       method: "POST", body: form,
       headers: { "X-Actor-Ref": a.ref, "X-Actor-Role": a.role },
     });
-    const body = await res.json();
-    if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : "ошибка загрузки");
+    // Ответ может оказаться и не JSON: перед API стоит прокси, и 404/502 от
+    // него приходят страницей. res.json() на ней падает SyntaxError, и
+    // пользователь видит «Unexpected token <» вместо причины.
+    const raw = await res.text();
+    let body: any = null;
+    try { body = raw ? JSON.parse(raw) : null; } catch { body = null; }
+    if (!res.ok || body === null) {
+      throw new Error(
+        typeof body?.detail === "string" ? body.detail
+        : `сервер ответил ${res.status} ${res.statusText || ""}`.trim()
+          + (body === null && raw ? " и не JSON — похоже, запрос не дошёл до API" : ""),
+      );
+    }
     return body as IngestReport;
   },
 };
@@ -209,4 +245,23 @@ export interface FigureOut {
 }
 export interface FiguresOut {
   session_id: string; figures: FigureOut[]; truncated: number; note: string;
+}
+
+/** Каталог мышц ЭМГ. `surface: false` — мышца существует, но поверхностными
+ *  электродами не снимается: подписать ею канал нельзя, и причина сказана. */
+export interface MuscleInfo {
+  code: string; label_ru: string; latin: string; region: string;
+  surface: boolean; note: string; aliases: string[];
+}
+export interface MontageChannelOut {
+  label: string; muscle: string; muscle_label_ru?: string; side: string;
+  param_code?: string;
+}
+export interface MontageTemplate {
+  code: string; label_ru: string; purpose: string;
+  channels: MontageChannelOut[]; channel_count: number;
+}
+export interface MontageOut {
+  id: string; template: string | null; note: string; set_by: string;
+  created_at: string; channels: MontageChannelOut[];
 }

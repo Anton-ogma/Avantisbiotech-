@@ -332,15 +332,161 @@ def load_anatomy(version: str = "2026.1") -> Anatomy:
     переименовании заголовка раздела.
     """
     raw = _read(CONFIG_ROOT / "regions" / "anatomy.yaml")
+    # Мышцы подмешиваются из каталога (Р-42): принадлежность области задана там,
+    # и дублировать списки здесь значило бы завести второй источник правды.
+    catalog = load_muscles()
+    by_region: dict[str, list[str]] = {}
+    for m in catalog.muscles:
+        if not m.surface:
+            continue
+        by_region.setdefault(m.region, []).extend(
+            (f"EMG_RMS_{m.code}_L", f"EMG_RMS_{m.code}_R", f"EMG_ASYM_{m.code}")
+        )
     regions = tuple(
         Region(
             key=r["key"], order=int(r.get("order", 99)), label_ru=r.get("label_ru", r["key"]),
             hint=r.get("hint", ""), codes=tuple(r.get("codes") or ()),
-            muscles=tuple(r.get("muscles") or ()), prefixes=tuple(r.get("prefixes") or ()),
+            muscles=tuple(r.get("muscles") or ()) + tuple(by_region.get(r["key"], ())),
+            prefixes=tuple(r.get("prefixes") or ()),
             structural=bool(r.get("structural", False)),
         )
         for r in (raw.get("regions") or [])
     )
+    orphans = sorted(set(by_region) - {r.key for r in regions})
+    if orphans:
+        # Мышца, чьей области нет в раскладке, выпала бы из обзора §14.3 молча.
+        raise ConfigError(f"каталог мышц ссылается на неизвестные области: {orphans}")
     if not regions:
         raise ConfigError("анатомическая раскладка пуста")
     return Anatomy(version=str(raw.get("version", version)), regions=regions)
+
+
+# ── Каталог мышц и монтажи ЭМГ (Р-42) ────────────────────────────────────────
+
+@dataclass(frozen=True, slots=True)
+class Muscle:
+    code: str
+    label_ru: str
+    latin: str
+    region: str
+    #: Снимается ли поверхностными электродами. False — мышца в каталоге есть,
+    #: но подписать ею канал нельзя: измерение этим методом не производится.
+    surface: bool
+    note: str
+    aliases: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class MuscleCatalog:
+    version: str
+    muscles: tuple[Muscle, ...]
+
+    def get(self, code: str) -> Muscle | None:
+        return next((m for m in self.muscles if m.code == code), None)
+
+    def by_alias(self, text: str) -> Muscle | None:
+        """Метка вендора → мышца. Совпадение точное по нормализованному алиасу.
+
+        Частичное совпадение здесь запрещено намеренно: «gastroc» подошло бы и
+        к общему отводу, и к обеим головкам, а это разные каналы (Р-40 о том же
+        для перекоса таза). Не опознали — пусть оператор пропишет вручную.
+        """
+        needle = " ".join(text.strip().lower().replace("-", " ").replace("_", " ").split())
+        if not needle:
+            return None
+        for m in self.muscles:
+            if needle == m.code.lower().replace("_", " "):
+                return m
+            if any(needle == a.lower() for a in m.aliases):
+                return m
+        return None
+
+    def surface_codes(self) -> tuple[str, ...]:
+        return tuple(m.code for m in self.muscles if m.surface)
+
+
+@dataclass(frozen=True, slots=True)
+class MontageChannel:
+    muscle: str
+    #: "L" | "R" | "both". Односторонний монтаж законен: так пишут, когда
+    #: интересует сторона поражения.
+    side: str
+
+    def sides(self) -> tuple[str, ...]:
+        return ("L", "R") if self.side == "both" else (self.side,)
+
+
+@dataclass(frozen=True, slots=True)
+class Montage:
+    code: str
+    label_ru: str
+    purpose: str
+    channels: tuple[MontageChannel, ...]
+
+    def param_codes(self) -> list[str]:
+        out: list[str] = []
+        for ch in self.channels:
+            out.extend(f"EMG_RMS_{ch.muscle}_{s}" for s in ch.sides())
+            if ch.side == "both":
+                out.append(f"EMG_ASYM_{ch.muscle}")
+        return out
+
+
+@dataclass(frozen=True, slots=True)
+class MontageLibrary:
+    version: str
+    montages: tuple[Montage, ...]
+
+    def get(self, code: str) -> Montage | None:
+        return next((m for m in self.montages if m.code == code), None)
+
+
+@lru_cache(maxsize=4)
+def load_muscles(version: str = "2026.1") -> MuscleCatalog:
+    raw = _read(CONFIG_ROOT / "emg" / "muscles.yaml")
+    muscles = tuple(
+        Muscle(
+            code=m["code"], label_ru=m.get("label_ru", m["code"]),
+            latin=m.get("latin", ""), region=m.get("region", "unknown"),
+            surface=bool(m.get("surface", True)), note=m.get("note", ""),
+            aliases=tuple(m.get("aliases") or ()),
+        )
+        for m in (raw.get("muscles") or [])
+    )
+    if not muscles:
+        raise ConfigError("каталог мышц пуст")
+    duplicates = {m.code for m in muscles if sum(1 for x in muscles if x.code == m.code) > 1}
+    if duplicates:
+        raise ConfigError(f"дубликаты кодов мышц: {sorted(duplicates)}")
+    return MuscleCatalog(version=str(raw.get("version", version)), muscles=muscles)
+
+
+@lru_cache(maxsize=4)
+def load_montages(version: str = "2026.1") -> MontageLibrary:
+    raw = _read(CONFIG_ROOT / "emg" / "montages.yaml")
+    catalog = load_muscles()
+    montages = []
+    for m in (raw.get("montages") or []):
+        channels = []
+        for ch in (m.get("channels") or []):
+            muscle = catalog.get(ch["muscle"])
+            if muscle is None:
+                raise ConfigError(f"монтаж {m['code']}: мышцы {ch['muscle']} нет в каталоге")
+            if not muscle.surface:
+                # Шаблон, предлагающий недоступный отвод, породил бы «измерения»
+                # там, где метод не работает. Ловим на загрузке, а не в отчёте.
+                raise ConfigError(
+                    f"монтаж {m['code']}: {muscle.code} не снимается поверхностно")
+            side = ch.get("side", "both")
+            if side not in ("L", "R", "both"):
+                raise ConfigError(f"монтаж {m['code']}: сторона {side!r} недопустима")
+            channels.append(MontageChannel(muscle=muscle.code, side=side))
+        if not channels:
+            raise ConfigError(f"монтаж {m['code']} пуст")
+        montages.append(Montage(
+            code=m["code"], label_ru=m.get("label_ru", m["code"]),
+            purpose=m.get("purpose", ""), channels=tuple(channels),
+        ))
+    if not montages:
+        raise ConfigError("библиотека монтажей пуста")
+    return MontageLibrary(version=str(raw.get("version", version)), montages=tuple(montages))

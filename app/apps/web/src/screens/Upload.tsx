@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { api, type IngestReport, type SessionOut } from "../lib/api";
+import { api, isSnapshot, type IngestReport, type SessionOut } from "../lib/api";
 import { Banner, Card, Empty, Tile } from "../components/ui";
 
 const STATUS_RU: Record<string, string> = {
@@ -21,6 +21,7 @@ export function Upload({ sessions, onDone }: { sessions: SessionOut[]; onDone: (
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const offline = isSnapshot();
   const input = useRef<HTMLInputElement>(null);
 
   async function send(files: FileList | File[]) {
@@ -46,6 +47,13 @@ export function Upload({ sessions, onDone }: { sessions: SessionOut[]; onDone: (
         сила. Модальность, показатели и проба определяются из самих файлов; указывать
         ничего не нужно. Что распознать не удалось, не пропадает: остаётся с причиной.
       </p>
+      {offline && (
+        <Banner text={
+          "Открыт автономный снимок: данные показываются, но загрузка файлов в него " +
+          "невозможна — бэкенда рядом нет. Разверните экземпляр (docker compose up), " +
+          "чтобы принимать выгрузки приборов."
+        } />
+      )}
       {error && <Banner text={error} />}
 
       <Card>

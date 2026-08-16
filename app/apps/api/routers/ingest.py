@@ -22,13 +22,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.hashing import file_hash
+from domain.montage import MontageError, SessionMontage, apply_montage, build_montage
 from importers import ParserNotFound, parse_blob
+from importers.emg_csv import EmgCsvParser
 
 from ..db import get_db
 from ..models import Measurement, RawImport, Session, Trial
 from ..security import Principal, audit, require
 from ..services.bundle import bundle_from_session
 from ..services.figures import store_figures
+from .imports import _readable
 from ..services.session_service import load_session, materialize_param_values
 
 router = APIRouter(prefix="/sessions", tags=["ingest"])
@@ -49,6 +52,38 @@ class FileOutcome:
     reason: str | None = None
 
 
+
+async def _session_montage(db: AsyncSession, session_id) -> "SessionMontage | None":
+    """Действующий монтаж сессии, если оператор его задал."""
+    from ..models import SessionMontageRow
+
+    row = (await db.execute(
+        select(SessionMontageRow)
+        .where(SessionMontageRow.session_id == session_id)
+        .order_by(SessionMontageRow.created_at.desc(), SessionMontageRow.id.desc())
+        .limit(1)
+    )).scalar_one_or_none()
+    if row is None:
+        return None
+    try:
+        return build_montage(list(row.channels or []), template=row.template, note=row.note)
+    except MontageError:
+        # Монтаж мог стать недействительным после смены каталога мышц. Разбор
+        # от этого не должен падать: файл разберётся тем, что распознаётся само.
+        return None
+
+
+def _emg_by_montage(blob: bytes, montage: "SessionMontage | None"):
+    """Повторная попытка открыть файл как ЭМГ, опираясь на монтаж сессии."""
+    if montage is None:
+        return None
+    parser = EmgCsvParser()
+    channel_map = montage.channel_map()
+    if not parser.detect(blob, channel_map):
+        return None
+    return parser, parser.parse(blob, channel_map)
+
+
 @router.post("/{session_id}/auto-ingest")
 async def auto_ingest(
     session_id: UUID,
@@ -65,6 +100,7 @@ async def auto_ingest(
             "план не утверждён: до утверждения плана пробы не выполняются (Р-29)",
         )
     bundle = bundle_from_session(session)
+    montage = await _session_montage(db, session.id)
     outcomes: list[FileOutcome] = []
     touched = False
 
@@ -92,17 +128,26 @@ async def auto_ingest(
         try:
             parser, results = parse_blob(blob)
         except ParserNotFound as e:
-            record.status, record.reason = "unrecognized", str(e)
-            outcomes.append(FileOutcome(name, "unrecognized", reason=str(e)))
-            continue
+            # Второй заход по монтажу сессии (Р-42): миограф подписывает каналы
+            # «CH1…CH8», и по имени столбца мышцу не восстановить ничем. Монтаж —
+            # пропись оператора, а не догадка платформы. На ПЕРВОМ заходе он не
+            # применяется намеренно: метки вроде «CH1» перетягивали бы на себя
+            # посторонние таблицы, где два таких столбца найдутся легко.
+            retry = _emg_by_montage(blob, montage)
+            if retry is None:
+                record.status, record.reason = "unrecognized", str(e)
+                outcomes.append(FileOutcome(name, "unrecognized", reason=str(e)))
+                continue
+            parser, results = retry
         except Exception as e:                                        # noqa: BLE001
-            record.status, record.reason = "failed", f"{type(e).__name__}: {e}"
+            record.status, record.reason = "failed", _readable(e)
             outcomes.append(FileOutcome(name, "failed", reason=record.reason))
             continue
 
         record.modality, record.format_id, record.status = parser.modality, parser.format_id, "parsed"
 
         for result in results:
+            apply_montage(result, montage)
             label = (result.raw_row.get("condition_label")
                      or result.raw_row.get("movement")
                      or "").strip()

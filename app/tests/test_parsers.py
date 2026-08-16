@@ -241,3 +241,31 @@ def test_parsed_protocol_carries_only_the_linear_obliquity():
     params = results[0].params
     assert params["DYN_PELVIC_OBLIQUITY"] == 17.0
     assert "DYN_PELVIC_OBLIQUITY_ANGLE" not in params
+
+
+def test_multi_section_protocol_splits_by_condition():
+    """Настоящий отчёт многостраничен: раздел на условие (QA, Р-43).
+
+    Разбор целиком как одного документа давал молчаливую порчу: метка условия
+    бралась от первого раздела, значения — от последнего, потому что
+    одноимённые строки перетирали друг друга. Ошибки не возникало, и результат
+    выглядел правдоподобно — худший вид отказа.
+    """
+    one = (FIXTURES / "formetric_dynamic4d_protocol.txt").read_text()
+    two = one.replace("лев окк", "прав окк").replace(
+        "Ротация таза 5° Прав.", "Ротация таза 9° Прав.")
+    _, results = parse_blob((one + "\n" + two).encode())
+
+    assert len(results) == 2
+    assert [r.raw_row["condition_label"] for r in results] == ["лев окк", "прав окк"]
+    assert results[0].params["DYN_PELVIC_ROTATION"] == 5.0
+    assert results[1].params["DYN_PELVIC_ROTATION"] == 9.0
+    for r in results:
+        assert "multi_section_protocol:2" in r.quality_flags
+
+
+def test_single_section_protocol_is_not_flagged():
+    """Одиночный лист не должен получать метку многораздельности."""
+    _, results = parse_blob((FIXTURES / "formetric_dynamic4d_protocol.txt").read_bytes())
+    assert len(results) == 1
+    assert not any(f.startswith("multi_section_protocol") for f in results[0].quality_flags)

@@ -218,9 +218,15 @@ def test_region_order_follows_examination_logic():
     from domain.config import load_anatomy
 
     keys = [r.key for r in load_anatomy().ordered()]
-    expected = ["tmj", "masticatory", "neck", "spine_frontal", "spine_sagittal",
+    # Области, добавленные вместе с каталогом мышц (Р-42), встроены в ту же
+    # последовательность, а не приписаны в конец: плечевой пояс идёт после шеи,
+    # живот — перед тазом, бедро — перед осью ног. Заданный §14.3 порядок при
+    # этом сохраняется как ПОДпоследовательность — это и проверяется.
+    required = ["tmj", "masticatory", "neck", "spine_frontal", "spine_sagittal",
                 "pelvis", "leg_axis", "shank", "feet"]
-    assert keys[:len(expected)] == expected
+    positions = [keys.index(k) for k in required]
+    assert positions == sorted(positions), keys
+    assert keys[0] == "tmj" and keys[-1] == "condition"
 
 
 def test_anatomy_is_display_only_and_unversioned(bundle):

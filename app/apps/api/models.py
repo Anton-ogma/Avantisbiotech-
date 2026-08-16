@@ -119,6 +119,25 @@ class Session(Base):
     )
 
 
+class SessionMontageRow(Base):
+    """Монтаж ЭМГ сессии: какие каналы записаны (Р-42).
+
+    Отдельная таблица, а не поле сессии: у монтажа своя история правок, и
+    «кто и когда переназначил канал» — вопрос, который задают при разборе
+    расхождений. Действующим считается последняя строка.
+    """
+    __tablename__ = "session_montages"
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    template: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str] = mapped_column(Text, default="")
+    #: [{"label": "CH1", "muscle": "MASSETER", "side": "L"}, …]
+    channels: Mapped[list] = mapped_column(JSONB_, default=list)
+    set_by: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class SessionPlan(Base):
     """Р-29: план утверждается ДО первой пробы. Валидатор, срабатывающий после
     ухода пациента, ничего не предотвращает."""
