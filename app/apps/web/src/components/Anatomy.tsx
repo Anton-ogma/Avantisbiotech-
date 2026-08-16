@@ -301,6 +301,61 @@ export function FeetLoad({ values, label }: { values: Values; label?: string }) 
   );
 }
 
+/* ── Изометрическая сила: четвёртый сигнал пробы (Р-41) ───────────────────── */
+
+export function StrengthBars({ values, label }: { values: Values; label?: string }) {
+  const ext = pick(values, "MYO_FORCE_TRUNK_EXT");
+  const flex = pick(values, "MYO_FORCE_TRUNK_FLEX");
+  const left = pick(values, "MYO_FORCE_TRUNK_LAT_L");
+  const right = pick(values, "MYO_FORCE_TRUNK_LAT_R");
+  const asym = pick(values, "MYO_ASYM_TRUNK_LAT");
+  if (ext === null && flex === null && left === null && right === null) {
+    return <NoData title="Сила · myoline" why="myoline под этой пробой не измерялась" />;
+  }
+  const bars = [
+    { key: "разгиб.", v: ext }, { key: "сгиб.", v: flex },
+    { key: "накл. Л", v: left }, { key: "накл. П", v: right },
+  ];
+  // Шкала общая для всех проб: автомасштаб на карточку сделал бы соседние
+  // столбцы несравнимыми, а ряд существует ровно ради сравнения (§14.2 п. 2).
+  const SCALE = 500;                                   // Н на полную высоту
+  const H = 74;
+
+  return (
+    <div className="fig">
+      <div className="fig-title">{label ?? "Сила · myoline"}</div>
+      <svg viewBox="0 0 120 110" role="img" aria-label="Изометрическая сила по группам">
+        <line x1="8" y1={20 + H} x2="112" y2={20 + H} stroke="var(--stroke)" strokeWidth="1" />
+        {bars.map((b, i) => {
+          const x = 14 + i * 25;
+          if (b.v === null) {
+            return <text key={b.key} x={x + 8} y={20 + H - 4} textAnchor="middle"
+                         className="fig-note-svg">—</text>;
+          }
+          const h = Math.max(2, Math.min(H, (b.v / SCALE) * H));
+          return (
+            <g key={b.key}>
+              {/* Цвет нейтральный: «больше силы лучше» не установлено (Р-18). */}
+              <rect x={x} y={20 + H - h} width="16" height={h} rx="4"
+                    fill="var(--accent-2)" opacity="0.55" />
+              <text x={x + 8} y={16 + H - h} textAnchor="middle" className="fig-note-svg">
+                {Math.round(b.v)}
+              </text>
+              <text x={x + 8} y={20 + H + 9} textAnchor="middle" className="fig-note-svg">
+                {b.key}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <Caption
+        text={asym === null ? "сила по группам, Н" : `асимметрия наклона ${fmt(asym, "%")}`}
+        sub={asym === null ? undefined : "положительное — правая сторона сильнее"}
+      />
+    </div>
+  );
+}
+
 /* ── Полный ряд схем для одной пробы ──────────────────────────────────────── */
 
 /** Порядок — §14.3: сверху вниз, как при осмотре. Схемы без данных не
@@ -315,6 +370,7 @@ export function AnatomySet({ values, label, compact = false }: {
       <PelvisFrontal values={values} label={label} />
       <PelvisAxial values={values} label={label} />
       <FeetLoad values={values} label={label} />
+      <StrengthBars values={values} label={label} />
     </div>
   );
 }
@@ -325,6 +381,7 @@ const VIEWS = [
   { key: "pelvis_obliquity", title: "Таз · перекос", C: PelvisFrontal },
   { key: "pelvis_rotation", title: "Таз · ротация", C: PelvisAxial },
   { key: "feet", title: "Стопы · опора", C: FeetLoad },
+  { key: "strength", title: "Сила · myoline", C: StrengthBars },
 ] as const;
 
 /** Сопоставление проб по схемам: строка — вид, столбцы — пробы.

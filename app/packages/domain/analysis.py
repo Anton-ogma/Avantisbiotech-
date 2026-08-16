@@ -18,6 +18,7 @@ from .effects import (
     interim_repeat_codes,
     param_effect,
 )
+from .crossmodal import muscle_index, strength_index
 from .hashing import input_hash
 from .indices import compute_z, postural_index, response_index
 
@@ -157,6 +158,10 @@ def analyze(session: SessionInput, bundle: ConfigBundle, *, interim: bool = Fals
             e.interpretation is not None for e in effects
             if e.confidence in ("probable", "reliable")
         )
+        # Мышца и сила считаются рядом с позой, но отдельными индексами (§9.5).
+        # Их отсутствие — не ноль: под пробой могло не быть ни ЭМГ, ни myoline.
+        mi_t, mi_b = muscle_index(trial.values, bundle), muscle_index(baseline_at_t, bundle)
+        si_t, si_b = strength_index(trial.values, bundle), strength_index(baseline_at_t, bundle)
         responses.append(ProbeResponse(
             probe_code=trial.probe_code,
             pass_no=trial.pass_no,
@@ -166,6 +171,8 @@ def analyze(session: SessionInput, bundle: ConfigBundle, *, interim: bool = Fals
             params=effects,
             confirmed=trial.pass_no > 1,
             direction_known=direction_known,
+            delta_muscle=None if mi_t is None or mi_b is None else round(mi_t - mi_b, 4),
+            delta_strength=None if si_t is None or si_b is None else round(si_t - si_b, 4),
         ))
 
     threshold = bundle.thresholds.sdc("PI") or 1.0
@@ -223,6 +230,8 @@ def analyze(session: SessionInput, bundle: ConfigBundle, *, interim: bool = Fals
             "confidence": r.confidence,
             "confirmed": r.confirmed,
             "direction_known": r.direction_known,
+            "delta_muscle": r.delta_muscle,
+            "delta_strength": r.delta_strength,
             "params": _effects_to_dict(r.params, bundle),
         } for r in responses],
         shortlist=shortlist_codes,

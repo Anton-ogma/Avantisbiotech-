@@ -105,9 +105,20 @@ def coherence(
     joint_delta: float | None,
     muscle_delta: float | None,
     threshold: float,
+    strength_delta: float | None = None,
+    *,
+    strength_votes: bool = False,
 ) -> Coherence:
     """§9.5. Значение переименовано из conflict в posture_muscle_conflict (Р-6):
-    слово занято вердиктом §9.7, а в отчёте оба поля стоят рядом."""
+    слово занято вердиктом §9.7, а в отчёте оба поля стоят рядом.
+
+    Сила (Р-41) — четвёртый сигнал, но голосует она только при
+    `strength_votes=True`, то есть когда направление MYO_FORCE_* установлено в
+    реестре. Пока оно `unknown`, знак «согласия» назначить нечем: рост усилия
+    под пробой может означать и лучшую опору, и компенсаторное напряжение.
+    Засчитать его в согласие «по умолчанию» значило бы протащить клиническое
+    допущение через арифметику — ровно то, что Р-18 запрещает.
+    """
     if posture_delta is None:
         return "undefined"
     posture_reliable = abs(posture_delta) >= threshold
@@ -115,15 +126,18 @@ def coherence(
         return "undefined"
     posture_improves = posture_delta < 0
 
-    signals = [d for d in (joint_delta, muscle_delta) if d is not None and abs(d) >= threshold]
+    voting = [joint_delta, muscle_delta]
+    if strength_votes:
+        voting.append(strength_delta)
+    signals = [d for d in voting if d is not None and abs(d) >= threshold]
     if posture_improves and muscle_delta is not None and muscle_delta >= threshold:
         return "posture_muscle_conflict"
     if not signals:
         return "posture_only"
     agreeing = sum(1 for d in signals if (d < 0) == posture_improves)
-    if agreeing == 2:
+    if agreeing == len(signals) and len(signals) >= 2:
         return "full"
-    if agreeing == 1:
+    if agreeing >= 1:
         return "partial"
     return "posture_only"
 
@@ -141,6 +155,12 @@ class ProbeResponse:
     #: направления (Р-18). Тогда у отклика есть ВЕЛИЧИНА, но нет знака, и он не
     #: принадлежит ни шорт-листу, ни списку ухудшений: назначать знак нечем.
     direction_known: bool = True
+    #: ΔMI и ΔSI — мышечный и силовой сигналы §9.5 (Р-41). Лежат рядом с
+    #: постуральным откликом, но в `delta_index` НЕ входят и на шорт-лист не
+    #: влияют: сложение мкВ и ньютонов с миллиметрами не имеет смысла, а знака
+    #: у силы под пробой пока нет.
+    delta_muscle: float | None = None
+    delta_strength: float | None = None
 
     @property
     def improving(self) -> bool:

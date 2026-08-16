@@ -73,6 +73,8 @@ export interface ProbeResponse {
   probe_code: string; pass_no: number; delta_index: number | null;
   index_kind: "RI" | "PI"; confidence: Confidence; confirmed: boolean;
   direction_known: boolean; params: ParamEffect[];
+  /** ΔMI и ΔSI — мышечный и силовой сигналы §9.5. В delta_index не входят. */
+  delta_muscle: number | null; delta_strength: number | null;
 }
 
 export interface AnalysisResult {
@@ -136,9 +138,12 @@ export const api = {
 export interface Signal { available: boolean; delta: number | null; reliable: boolean; detail: string }
 export interface ProbeSynthesis {
   probe_code: string; label_ru: string;
-  posture: Signal; joint: Signal; muscle: Signal;
+  posture: Signal; joint: Signal; muscle: Signal; strength: Signal;
   coherence: string; verdict: string; verdict_ru: string; rationale: string;
   excursion: { status: string; delta_mm: number | null; message: string } | null;
+  strength_params: { code: string; label_ru: string; delta: number; effect_size: number | null;
+                     confidence: Confidence; direction: Direction;
+                     interpretation: "improving" | "worsening" | null }[];
   params: { code: string; label_ru: string; delta: number; effect_size: number | null;
             confidence: Confidence; direction: Direction;
             interpretation: "improving" | "worsening" | null }[];

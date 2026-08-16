@@ -23,7 +23,8 @@ def _signal(s) -> dict:
 def _out(p: ProbeSynthesis) -> dict:
     return {
         "probe_code": p.probe_code, "label_ru": p.label_ru,
-        "posture": _signal(p.posture), "joint": _signal(p.joint), "muscle": _signal(p.muscle),
+        "posture": _signal(p.posture), "joint": _signal(p.joint),
+        "muscle": _signal(p.muscle), "strength": _signal(p.strength),
         "coherence": p.coherence, "verdict": p.verdict, "verdict_ru": p.verdict_ru,
         "rationale": p.rationale,
         "excursion": None if p.excursion is None else {
@@ -35,6 +36,11 @@ def _out(p: ProbeSynthesis) -> dict:
             "delta": e.delta, "effect_size": e.effect_size, "confidence": e.confidence,
             "direction": e.direction, "interpretation": e.interpretation,
         } for e in p.posture.params],
+        "strength_params": [{
+            "code": e.code, "label_ru": e.label_ru if hasattr(e, "label_ru") else e.code,
+            "delta": e.delta, "effect_size": e.effect_size, "confidence": e.confidence,
+            "direction": e.direction, "interpretation": e.interpretation,
+        } for e in p.strength.params],
     }
 
 
@@ -73,8 +79,9 @@ async def crossmodal(
         spec = bundle.probes.get(code)
         if spec is None:
             return True
-        # Нейтраль — опора, а не отклик. Myoline — сессионное измерение и в анализе
-        # проб не участвует (§9.8 MUST), в ранжирование его пускать нельзя.
+        # Нейтраль — опора, а не отклик. MYOLINE_SESSION — не проба, а корзина
+        # для выгрузок без метки условия (Р-41): измерения силы под настоящими
+        # пробами приходят вместе с ними и в ранжирование входят.
         return not spec.is_neutral and spec.modality != "myoline"
 
     syntheses = [
@@ -93,8 +100,9 @@ async def crossmodal(
         "modalities": {k: sorted(v) for k, v in sorted(modalities.items())},
         "session_level": {
             "myoline": next(iter(session_level.values()), {}),
-            "note": "изометрическая сила — ковариата дозирования, в анализе проб "
-                    "не участвует (§9.8 MUST)",
+            "note": "сила из выгрузок без метки условия: к пробе не привязана и в "
+                    "сравнение проб не входит. Сила, измеренная под пробой, "
+                    "показана в самой пробе четвёртым сигналом (Р-41).",
         },
         "probes": [_out(p) for p in syntheses],
         "ranking": {k: [p.probe_code for p in v] for k, v in ranking.items()},
@@ -145,7 +153,7 @@ async def compare_probes(
 
     def is_probe(code: str) -> bool:
         spec = bundle.probes.get(code)
-        return not (spec and spec.is_neutral)
+        return not (spec and (spec.is_neutral or spec.modality == "myoline"))
 
     wanted = [c for c in (probes.split(",") if probes else []) if c in by_probe]
     if not wanted:

@@ -234,12 +234,17 @@ def test_anatomy_is_display_only_and_unversioned(bundle):
 
 
 def test_structural_regions_marked(bundle):
-    """§14.2 п. 8: структурные величины выводятся без Δ."""
+    """§14.2 п. 8: структурные величины выводятся без Δ.
+
+    Сила из этого списка вышла (Р-41): она измеряется под пробой и сравнивается
+    с нейтралью, как поза, сустав и мышца. Структурной остаётся ось ног — её
+    отсчитывать от нейтрали действительно не от чего.
+    """
     from domain.config import load_anatomy
 
     by_key = {r.key: r for r in load_anatomy().regions}
     assert by_key["leg_axis"].structural is True
-    assert by_key["strength"].structural is True
+    assert by_key["strength"].structural is False
     assert by_key["pelvis"].structural is False
 
 
@@ -261,3 +266,81 @@ def test_muscles_are_distributed_to_their_regions():
     assert anatomy.region_of("EMG_RMS_ERECTOR_SPINAE_R").key == "spine_sagittal"
     assert anatomy.region_of("EMG_RMS_GLUTEUS_MAXIMUS_L").key == "pelvis"
     assert anatomy.region_of("EMG_RMS_GASTROCNEMIUS_R").key == "shank"
+
+
+# ── Сила как четвёртый сигнал (Р-41) ─────────────────────────────────────────
+
+def _with_strength(bundle, **overrides):
+    from domain.crossmodal import synthesize_probe
+
+    base = {
+        "LATERAL_DEVIATION_RMS": 6.0, "PELVIC_TILT": 10.0,
+        "EMG_RMS_MASSETER_L": 35.0, "EMG_RMS_MASSETER_R": 36.0,
+        "MYO_FORCE_TRUNK_EXT": 405.0, "MYO_FORCE_TRUNK_FLEX": 292.0,
+        "MYO_FORCE_TRUNK_LAT_L": 188.0, "MYO_FORCE_TRUNK_LAT_R": 196.0,
+    }
+    return synthesize_probe("MAND_SPLINT_THERAPEUTIC", {**base, **overrides}, base, bundle)
+
+
+def test_strength_index_is_separate_from_postural(bundle):
+    """Р-41: сила — четвёртый сигнал, а не слагаемое индекса.
+
+    Складывать ньютоны с миллиметрами бессмысленно; сила сравнивается сама с
+    собой между пробами.
+    """
+    from domain.crossmodal import strength_index
+    from domain.indices import response_index
+
+    force = {"MYO_FORCE_TRUNK_EXT": 450.0, "MYO_FORCE_TRUNK_FLEX": 300.0}
+    assert strength_index(force, bundle) is not None
+    assert response_index(force, bundle).total is None      # в RI не попадает
+
+
+def test_strength_signal_is_measured_per_probe(bundle):
+    s = _with_strength(bundle, MYO_FORCE_TRUNK_EXT=455.0)
+    assert s.strength.available is True
+    assert s.strength.delta is not None and s.strength.delta > 0
+    assert "SI" in s.strength.detail
+
+
+def test_strength_absent_is_said_plainly(bundle):
+    """Отсутствие myoline под пробой — состояние, а не ноль."""
+    from domain.crossmodal import synthesize_probe
+
+    base = {"LATERAL_DEVIATION_RMS": 6.0, "PELVIC_TILT": 10.0}
+    s = synthesize_probe("MAND_CLENCH", {**base, "LATERAL_DEVIATION_RMS": 2.0}, base, bundle)
+    assert s.strength.available is False
+    assert s.strength.delta is None
+
+
+def test_strength_does_not_vote_while_direction_unknown(bundle):
+    """Р-18 + Р-41: без установленного направления сила в когерентность не идёт.
+
+    Рост усилия под пробой может означать и лучшую опору, и компенсаторное
+    напряжение. Засчитать его в «согласие» значило бы протащить клиническое
+    допущение через арифметику.
+    """
+    from domain.effects import coherence
+
+    # Сустав молчит, мышца молчит, сила изменилась сильно и «в сторону позы».
+    assert coherence(-3.0, None, None, 1.0, -4.0, strength_votes=False) == "posture_only"
+    assert coherence(-3.0, None, None, 1.0, -4.0, strength_votes=True) == "partial"
+
+
+def test_coherence_full_requires_all_measured_signals(bundle):
+    """«Полная» когерентность — согласие ВСЕХ измеренных сигналов, а не ровно двух."""
+    from domain.effects import coherence
+
+    assert coherence(-3.0, -2.0, -2.0, 1.0) == "full"
+    assert coherence(-3.0, -2.0, -2.0, 1.0, -2.0, strength_votes=True) == "full"
+    assert coherence(-3.0, -2.0, -2.0, 1.0, 2.0, strength_votes=True) == "partial"
+
+
+def test_strength_asymmetry_is_not_folded_into_the_index(bundle):
+    """Асимметрия безразмерна и имеет свой порог: сложение с уровнем силы дало бы
+    величину, рост которой нельзя истолковать."""
+    from domain.crossmodal import strength_index
+
+    force = {"MYO_FORCE_TRUNK_EXT": 405.0}
+    assert strength_index(force, bundle) == strength_index(
+        {**force, "MYO_ASYM_TRUNK_LAT": 25.0}, bundle)

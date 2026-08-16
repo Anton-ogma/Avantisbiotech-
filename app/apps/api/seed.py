@@ -44,6 +44,20 @@ BASE = {
     "PELVIC_TORSION": 2.1, "PELVIC_TILT": 10.2, "TRUNK_INCLINATION": 3.6,
 }
 
+#: Изометрическая сила под пробой (Р-41): в этом протоколе myoline ставится на
+#: тех же условиях, что формометрия, ЭМГ и кондилография.
+BASE_MYO = {
+    "MYO_FORCE_TRUNK_EXT": 405.0, "MYO_FORCE_TRUNK_FLEX": 292.0,
+    "MYO_FORCE_TRUNK_LAT_L": 188.0, "MYO_FORCE_TRUNK_LAT_R": 196.0,
+}
+BASE_EMG = {
+    "EMG_RMS_MASSETER_L": 35.0, "EMG_RMS_MASSETER_R": 36.5,
+    "EMG_RMS_TEMPORALIS_L": 21.0, "EMG_RMS_TEMPORALIS_R": 21.8,
+    "EMG_RMS_SCM_L": 10.9, "EMG_RMS_SCM_R": 11.3,
+    "EMG_RMS_TRAPEZIUS_L": 19.2, "EMG_RMS_TRAPEZIUS_R": 19.8,
+    "EMG_RMS_ERECTOR_SPINAE_L": 40.1, "EMG_RMS_ERECTOR_SPINAE_R": 40.7,
+}
+
 #: Эффекты по пробам: множители сдвига в единицах SDC.
 EFFECTS = {
     "MAND_CLENCH": {"LATERAL_DEVIATION_RMS": 2.4, "PELVIC_TILT": 1.6, "TRUNK_INCLINATION": 1.2},
@@ -56,6 +70,39 @@ EFFECTS = {
         "TRUNK_IMBALANCE_VP_DM": -1.5, "VERTEBRAL_ROTATION_RMS": -1.2,
     },
 }
+
+#: Сила и мышечная активность под пробой, в единицах SDC. Сжатие даёт классический
+#: конфликт §9.5: поза хуже, сила выше — ровно тот случай, ради которого сигналы
+#: держат раздельно, а не складывают в один индекс.
+MYO_EFFECTS = {
+    "MAND_CLENCH": {"MYO_FORCE_TRUNK_EXT": 1.9, "MYO_FORCE_TRUNK_LAT_R": 1.4},
+    "MAND_LAT_LEFT": {"MYO_FORCE_TRUNK_LAT_L": 1.2, "MYO_FORCE_TRUNK_LAT_R": -0.7},
+    "MAND_LAT_RIGHT": {"MYO_FORCE_TRUNK_LAT_R": 1.1, "MYO_FORCE_TRUNK_LAT_L": -0.8},
+    "MAND_SPLINT_THERAPEUTIC": {
+        "MYO_FORCE_TRUNK_EXT": 1.3, "MYO_FORCE_TRUNK_FLEX": 0.9,
+        "MYO_FORCE_TRUNK_LAT_L": 0.8, "MYO_FORCE_TRUNK_LAT_R": 0.7,
+    },
+    "PODAL_WEDGE_L": {"MYO_FORCE_TRUNK_LAT_L": 0.6},
+}
+EMG_EFFECTS = {
+    "MAND_CLENCH": {"EMG_RMS_MASSETER_R": 2.8, "EMG_RMS_MASSETER_L": 1.9,
+                    "EMG_RMS_TEMPORALIS_R": 2.1, "EMG_RMS_SCM_R": 1.2},
+    "MAND_LAT_LEFT": {"EMG_RMS_MASSETER_L": 1.1, "EMG_RMS_TEMPORALIS_L": 0.9},
+    "MAND_LAT_RIGHT": {"EMG_RMS_MASSETER_R": 1.0},
+    "MAND_SPLINT_THERAPEUTIC": {"EMG_RMS_MASSETER_R": -1.4, "EMG_RMS_TRAPEZIUS_R": -1.1,
+                                "EMG_RMS_ERECTOR_SPINAE_R": -0.9},
+}
+
+
+def _asymmetry(params: dict[str, float], prefix: str, out_prefix: str) -> None:
+    """Асимметрия по парам L/R — единая формула для ЭМГ и силы (Р-41)."""
+    bases = {c[:-2] for c in params if c.endswith(("_L", "_R")) and c.startswith(prefix)}
+    for base in bases:
+        r, l = params.get(f"{base}_R"), params.get(f"{base}_L")
+        if r is None or l is None or (abs(r) + abs(l)) == 0:
+            continue
+        name = base[len(prefix):] if prefix.endswith("_") else base
+        params[f"{out_prefix}{name}"] = round(200 * (r - l) / (abs(r) + abs(l)), 2)
 
 
 async def seed(patients: int = 6) -> None:
@@ -99,6 +146,7 @@ async def seed(patients: int = 6) -> None:
             session.status = "plan_approved"
 
             personal = {k: v * rng.uniform(0.85, 1.15) for k, v in BASE.items()}
+            personal_scale = rng.uniform(0.88, 1.12)   # общий масштаб ЭМГ и силы пациента
             drift_rate = rng.uniform(-8e-6, 8e-6)   # ~3% за час, физиологичный дрейф позы
 
             for position, (code, role, t) in enumerate(PLAN):
@@ -126,6 +174,23 @@ async def seed(patients: int = 6) -> None:
                     quality_flags=[] if rng.random() > 0.12 else ["excess_sway"],
                 ))
 
+                # Одноимённые пробы на всех приборах (Р-41): под тем же условием
+                # снимаются ЭМГ и изометрическая сила, а не только формометрия.
+                for modality, base_values, effects, flags in (
+                    ("emg", BASE_EMG, EMG_EFFECTS, ["emg_amplitude_session_scoped"]),
+                    ("myoline", BASE_MYO, MYO_EFFECTS, []),
+                ):
+                    params: dict[str, float] = {}
+                    for param, base_value in base_values.items():
+                        sdc = bundle.thresholds.sdc(param) or 1.0
+                        shift = effects.get(code, {}).get(param, 0.0) * sdc
+                        params[param] = round(
+                            base_value * personal_scale + shift + rng.gauss(0, sdc * 0.2), 2)
+                    _asymmetry(params, "EMG_RMS_", "EMG_ASYM_")
+                    _asymmetry(params, "MYO_FORCE_", "MYO_ASYM_")
+                    db.add(Measurement(trial_id=trial.id, modality=modality,
+                                       params=params, quality_flags=flags))
+
             session.status = "probes_running"
             await db.flush()
 
@@ -148,6 +213,20 @@ async def seed(patients: int = 6) -> None:
                     shift = EFFECTS.get(code, {}).get(param, 0.0) * sdc
                     values[param] = round(base_value + shift + rng.gauss(0, sdc * 0.2), 3)
                 db.add(Measurement(trial_id=trial.id, modality="formetric", params=values))
+                for modality, base_values, effects, flags in (
+                    ("emg", BASE_EMG, EMG_EFFECTS, ["emg_amplitude_session_scoped"]),
+                    ("myoline", BASE_MYO, MYO_EFFECTS, []),
+                ):
+                    params = {}
+                    for param, base_value in base_values.items():
+                        sdc = bundle.thresholds.sdc(param) or 1.0
+                        shift = effects.get(code, {}).get(param, 0.0) * sdc
+                        params[param] = round(
+                            base_value * personal_scale + shift + rng.gauss(0, sdc * 0.2), 2)
+                    _asymmetry(params, "EMG_RMS_", "EMG_ASYM_")
+                    _asymmetry(params, "MYO_FORCE_", "MYO_ASYM_")
+                    db.add(Measurement(trial_id=trial.id, modality=modality,
+                                       params=params, quality_flags=flags))
             session.pass_count = 2
             session.status = "quality_reviewed"
             await db.flush()

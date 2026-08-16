@@ -110,10 +110,11 @@ async def auto_ingest(
             spec = (bundle.probes.get(explicit) if explicit else None) or (
                 bundle.probes.by_alias(label) if label else None
             )
-            if result.modality == "myoline":
-                # MUST §9.8: myoline в анализе проб НЕ участвует. Это сессионная
-                # характеристика (сила), а не отклик на условие — она ложится
-                # на сессию, а не на пробу, и метка условия ей не нужна.
+            if result.modality == "myoline" and spec is None:
+                # Р-41: сила измеряется под пробой и в анализе участвует. Сюда
+                # попадают только выгрузки БЕЗ метки условия — архивные файлы,
+                # которые к пробе не привязать. Отвергать их нельзя, подставлять
+                # под произвольную пробу — тем более.
                 trial = await _trial_for(db, session, "MYOLINE_SESSION", bundle)
                 db.add(Measurement(
                     trial_id=trial.id, raw_import_id=record.id, modality=result.modality,
@@ -125,7 +126,8 @@ async def auto_ingest(
                 outcomes.append(FileOutcome(
                     name, "ingested", parser.modality, parser.format_id,
                     "сессионное измерение", "MYOLINE_SESSION", len(result.params),
-                    "изометрическая сила: ковариата дозирования, в анализе проб не участвует",
+                    "в файле нет метки условия: сила осталась сессионной ковариатой "
+                    "и в сравнение проб не войдёт",
                 ))
                 continue
 

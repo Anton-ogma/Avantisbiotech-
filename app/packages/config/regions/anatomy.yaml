@@ -83,9 +83,9 @@ regions:
   - key: strength
     order: 10
     label_ru: "Изометрическая сила"
-    hint: "сессионное измерение: в анализе проб не участвует (§9.8 MUST)"
-    prefixes: ["MYO_FORCE_"]
-    structural: true
+    hint: "четвёртый сигнал пробы (Р-41): сравнивается между пробами, но в PI/RI не входит"
+    prefixes: ["MYO_FORCE_", "MYO_ASYM_"]
+    structural: false
   - key: condition
     order: 11
     label_ru: "Условия пробы"

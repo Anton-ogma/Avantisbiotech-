@@ -4,7 +4,8 @@ import { api, type CompareOut, type CrossModal as CM, type FiguresOut, type Meas
 import { AnatomyCompare, AnatomySet, type Values } from "../components/Anatomy";
 import { BodyMap, RegionBars } from "../components/BodyMap";
 import { ProtocolFigures } from "../components/ProtocolFigures";
-import { CondylarProfile, EmgMirror, SignalTriad, type Channel, type CondylarMetric } from "../components/Modality";
+import { CondylarProfile, EmgMirror, SignalPanel, type Channel,
+         type CondylarMetric } from "../components/Modality";
 import { DeltaChart } from "../components/DeltaChart";
 import { Banner, Card, DeltaBadge, Empty, Segmented, Tile } from "../components/ui";
 
@@ -23,6 +24,10 @@ const BUCKET_TITLE: Record<string, string> = {
 /** Палитра серий: цвет кодирует ПРОБУ, направление уходит в подпись — §14.2 п. 3
  *  для случая нескольких наложенных объектов. */
 const PALETTE = ["var(--accent)", "var(--accent-2)", "#e08a3c", "#39a06b", "#c2569a"];
+
+const SIGNAL_RU: Record<string, string> = {
+  posture: "Поза", joint: "Сустав", muscle: "Мышца", strength: "Сила",
+};
 
 const MUSCLE_RU: Record<string, string> = {
   MASSETER: "жеват.", TEMPORALIS: "височ.", SCM: "ГКС", TRAPEZIUS: "трапец.",
@@ -381,18 +386,24 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                 </>
               )}
 
-              <div className="section-title">Три сигнала пробы</div>
+              <div className="section-title">Четыре сигнала пробы</div>
               <Card>
-                <div className="chart-scroll"><SignalTriad posture={current.posture.delta} joint={current.joint.delta}
-                             muscle={current.muscle.delta} threshold={2.0} /></div>
-                <div className="grid cols-3" style={{ marginTop: 12 }}>
-                  {(["posture", "joint", "muscle"] as const).map((k) => (
+                <div className="chart-scroll">
+                  <SignalPanel posture={current.posture.delta} joint={current.joint.delta}
+                               muscle={current.muscle.delta} strength={current.strength?.delta ?? null}
+                               threshold={2.0} />
+                </div>
+                <div className="grid cols-4" style={{ marginTop: 12 }}>
+                  {(["posture", "joint", "muscle", "strength"] as const).map((k) => (
                     <div key={k} className="tile-hint">
-                      <strong>{k === "posture" ? "Поза" : k === "joint" ? "Сустав" : "Мышца"}:</strong>{" "}
-                      {current[k].detail}
+                      <strong>{SIGNAL_RU[k]}:</strong> {current[k]?.detail ?? "не измерено"}
                     </div>
                   ))}
                 </div>
+                <p className="tile-hint">
+                  Сила показана наравне с остальными, но знака «лучше/хуже» не несёт:
+                  направление под пробой не установлено, и в вердикт она не входит.
+                </p>
               </Card>
 
               {current.posture.available && current.params.length > 0 && (

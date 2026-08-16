@@ -154,8 +154,15 @@ class EmgCsvParser:
 class MyolineCsvParser:
     """DIERS Myoline — изометрическая сила.
 
-    MUST §9.8: в анализе проб не участвует. Ковариата для дозирования программы
-    и для гипотезы «сильные отвечают иначе» (Р-35, слой 3).
+    Р-41: сила измеряется ПОД ПРОБОЙ, как формометрия, ЭМГ и кондилография.
+    Прежняя редакция §9.8 считала её сессионной характеристикой — это неверно
+    для протокола, где одноимённые пробы ставятся на всех четырёх приборах:
+    одно число на сессию стирало бы ровно тот эффект, ради которого измерение
+    и делается.
+
+    Файл БЕЗ метки условия по-прежнему принимается как сессионный: у клиники
+    остаются архивные выгрузки, и отвергать их из-за отсутствия столбца нельзя.
+    Различаются они флагом качества, а не молча.
     """
 
     format_id = "myoline-csv-v1"
@@ -180,9 +187,12 @@ class MyolineCsvParser:
 
     def parse(self, blob: bytes) -> list[ParseResult]:
         _, rows = read_rows(blob)
-        params: dict[str, float] = {}
+        # Строки группируются по условию: одна выгрузка обычно несёт все пробы
+        # подряд, и разрезать её на файлы вручную оператор не должен.
+        by_condition: dict[str, dict[str, float]] = {}
         unmapped: dict[str, str] = {}
         for row in rows:
+            condition = next((row[k] for k in CONDITION_KEYS if row.get(k)), "").strip()
             group_raw = next((row[k] for k in ("Group", "Movement", "Группа", "Движение")
                               if row.get(k)), "")
             value = next((parse_number(row[k]) for k in ("Force_N", "Force", "Сила", "N")
@@ -192,10 +202,37 @@ class MyolineCsvParser:
                 if group_raw:
                     unmapped[group_raw] = str(value)
                 continue
-            params[f"MYO_FORCE_{code}"] = value
-        return [ParseResult(
+            by_condition.setdefault(condition, {})[f"MYO_FORCE_{code}"] = value
+
+        out: list[ParseResult] = []
+        for condition, params in by_condition.items():
+            add_lateral_asymmetry(params)
+            flags: list[str] = []
+            if not params:
+                flags.append("no_canonical_columns")
+            elif not condition:
+                # Без метки условия сила не привязывается к пробе и остаётся
+                # сессионной ковариатой. Это ограничение файла, а не методики.
+                flags.append("myoline_session_level_no_condition")
+            out.append(ParseResult(
+                format_id=self.format_id, modality=self.modality, device_sw_version=None,
+                params=params, unmapped=unmapped, quality_flags=flags,
+                raw_row={"condition_label": condition},
+            ))
+        return out or [ParseResult(
             format_id=self.format_id, modality=self.modality, device_sw_version=None,
-            params=params, unmapped=unmapped,
-            quality_flags=["myoline_not_in_probe_analysis"] if params else ["no_canonical_columns"],
-            raw_row={},
+            params={}, unmapped=unmapped, quality_flags=["no_canonical_columns"], raw_row={},
         )]
+
+
+def add_lateral_asymmetry(params: dict[str, float]) -> None:
+    """MYO_ASYM_TRUNK_LAT — асимметрия боковой силы, в процентах.
+
+    Считается так же, как асимметрия ЭМГ и мыщелков: 200·(R−L)/(|R|+|L|).
+    Единая формула важнее удобства — иначе три «асимметрии» в одном отчёте
+    оказались бы величинами с разной шкалой под одним словом.
+    """
+    r, l = params.get("MYO_FORCE_TRUNK_LAT_R"), params.get("MYO_FORCE_TRUNK_LAT_L")
+    if r is None or l is None or (abs(r) + abs(l)) == 0:
+        return
+    params["MYO_ASYM_TRUNK_LAT"] = round(200 * (r - l) / (abs(r) + abs(l)), 2)

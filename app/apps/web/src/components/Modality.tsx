@@ -115,21 +115,29 @@ export function CondylarProfile({ metrics }: { metrics: CondylarMetric[] }) {
 }
 
 /** Три сигнала пробы на одной шкале: поза, сустав, мышца (§9.5). */
-export function SignalTriad({ posture, joint, muscle, threshold }: {
-  posture: number | null; joint: number | null; muscle: number | null; threshold: number;
+/** Четыре сигнала пробы §9.5 (Р-41): поза, сустав, мышца, сила.
+ *
+ *  Сила красится нейтрально независимо от знака: направление «больше силы
+ *  лучше» под пробой не установлено, и зелёная полоса утверждала бы обратное
+ *  в самом заметном месте экрана (§14.2 п. 3, Р-18). */
+export function SignalPanel({ posture, joint, muscle, strength, threshold }: {
+  posture: number | null; joint: number | null; muscle: number | null;
+  strength?: number | null; threshold: number;
 }) {
   const rows = [
-    { key: "поза", value: posture, hint: "Δ индекса" },
-    { key: "сустав", value: joint, hint: "Δ асимметрии, %" },
-    { key: "мышца", value: muscle, hint: "ΔMI" },
+    { key: "поза", value: posture, hint: "Δ индекса", unsigned: false },
+    { key: "сустав", value: joint, hint: "Δ асимметрии, %", unsigned: false },
+    { key: "мышца", value: muscle, hint: "ΔMI", unsigned: false },
+    { key: "сила", value: strength ?? null, hint: "ΔSI · направление не установлено",
+      unsigned: true },
   ];
-  const scale = Math.max(threshold * 2.4, ...rows.map((r) => Math.abs(r.value ?? 0)) ) * 1.12;
+  const scale = Math.max(threshold * 2.4, ...rows.map((r) => Math.abs(r.value ?? 0))) * 1.12;
   const W = 720, padL = 128, rowH = 34, H = rows.length * rowH + 26;
   const plot = W - padL - 90;
   const x = (v: number) => padL + plot / 2 + (v / scale) * (plot / 2);
 
   return (
-    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Три сигнала пробы">
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Сигналы пробы: поза, сустав, мышца, сила">
       <rect x={x(-threshold)} y={16} width={x(threshold) - x(-threshold)} height={H - 26}
             fill="var(--noise-band)" rx="6" />
       <text x={x(0)} y={11} textAnchor="middle" fontSize="10" fill="var(--text-3)">
@@ -159,8 +167,9 @@ export function SignalTriad({ posture, joint, muscle, threshold }: {
             </text>
             <rect x={Math.min(x(0), x(r.value))} y={y - 8}
                   width={Math.max(2, Math.abs(x(r.value) - x(0)))} height={16} rx="8"
-                  fill={noise ? "var(--neutral)" : r.value < 0 ? "var(--good)" : "var(--bad)"}
-                  opacity={noise ? 0.32 : 0.85} />
+                  fill={noise || r.unsigned ? "var(--neutral)"
+                        : r.value < 0 ? "var(--good)" : "var(--bad)"}
+                  opacity={noise ? 0.32 : r.unsigned ? 0.6 : 0.85} />
             <text x={W - 78} y={y + 4} fontSize="11" fill="var(--text-2)"
                   style={{ fontVariantNumeric: "tabular-nums" }}>
               {r.value > 0 ? "+" : ""}{r.value.toFixed(2)}

@@ -83,6 +83,19 @@ export function SessionView({ sessionId, onBack }: { sessionId: string; onBack: 
         </div>
         {selected ? (
           <>
+            <div className="grid cols-3" style={{ marginBottom: 16 }}>
+              <Tile label={`Δ${selected.index_kind} · поза`}
+                    value={selected.delta_index === null ? "—" : selected.delta_index.toFixed(2)}
+                    hint="постуральный отклик от нейтрали, в единицах SDC" />
+              <Tile label="ΔMI · мышца"
+                    value={selected.delta_muscle === null ? "не измерено"
+                           : selected.delta_muscle.toFixed(2)}
+                    hint="отдельный сигнал §9.5, в индекс не суммируется" />
+              <Tile label="ΔSI · сила"
+                    value={selected.delta_strength === null ? "не измерено"
+                           : selected.delta_strength.toFixed(2)}
+                    hint="myoline под пробой (Р-41); направление не установлено" />
+            </div>
             <div className="chart-scroll"><DeltaChart params={selected.params} /></div>
             <div className="table-wrap" style={{ marginTop: 18 }}>
               <table>

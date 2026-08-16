@@ -1,0 +1,13 @@
+Condition;Group;Force_N;Device
+нейтраль;Extension;402,1;Myoline
+нейтраль;Flexion;291,4;Myoline
+нейтраль;Lat_left;188,0;Myoline
+нейтраль;Lat_right;196,3;Myoline
+лев окк;Extension;431,8;Myoline
+лев окк;Flexion;302,7;Myoline
+лев окк;Lat_left;193,5;Myoline
+лев окк;Lat_right;199,1;Myoline
+сжатие;Extension;448,2;Myoline
+сжатие;Flexion;310,5;Myoline
+сжатие;Lat_left;186,2;Myoline
+сжатие;Lat_right;214,7;Myoline

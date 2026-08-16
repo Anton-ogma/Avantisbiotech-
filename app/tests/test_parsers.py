@@ -145,12 +145,38 @@ def test_emg_wide_and_long_layouts():
     assert long_form[0].params["EMG_RMS_TEMPORALIS_R"] == 20.4
 
 
-def test_myoline_excluded_from_probe_analysis():
-    """MUST §9.8: изометрическая сила в анализе проб не участвует."""
+def test_myoline_without_condition_stays_session_level():
+    """Файл без метки условия принимается, но к пробе не привязывается (Р-41).
+
+    Отвергать такие выгрузки нельзя — у клиники есть архив, — но и молча
+    подставлять их под какую-нибудь пробу тоже: флаг говорит, чего в файле нет.
+    """
     parser, results = parse_blob((FIXTURES / "myoline_force.csv").read_bytes())
     assert parser.format_id == "myoline-csv-v1"
+    assert len(results) == 1
     assert results[0].params["MYO_FORCE_TRUNK_EXT"] == 412.5
-    assert "myoline_not_in_probe_analysis" in results[0].quality_flags
+    assert results[0].raw_row["condition_label"] == ""
+    assert "myoline_session_level_no_condition" in results[0].quality_flags
+
+
+def test_myoline_splits_by_condition():
+    """Р-41: сила измеряется под пробой — одна выгрузка несёт все условия."""
+    _, results = parse_blob((FIXTURES / "myoline_by_probe.csv").read_bytes())
+    assert [r.raw_row["condition_label"] for r in results] == ["нейтраль", "лев окк", "сжатие"]
+    assert results[1].params["MYO_FORCE_TRUNK_EXT"] == 431.8
+    assert results[0].quality_flags == []          # условие есть — привязка возможна
+
+
+def test_myoline_lateral_asymmetry_uses_the_common_formula():
+    """Асимметрия силы считается так же, как асимметрия ЭМГ и мыщелков.
+
+    Три «асимметрии» с разной шкалой под одним словом читались бы как одна
+    величина и сравнивались бы между собой — чего делать было бы нельзя.
+    """
+    _, results = parse_blob((FIXTURES / "myoline_by_probe.csv").read_bytes())
+    clench = results[2].params
+    r, l = clench["MYO_FORCE_TRUNK_LAT_R"], clench["MYO_FORCE_TRUNK_LAT_L"]
+    assert clench["MYO_ASYM_TRUNK_LAT"] == round(200 * (r - l) / (abs(r) + abs(l)), 2)
 
 
 def test_channel_resolution_needs_muscle_and_side():

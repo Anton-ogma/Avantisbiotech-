@@ -1,8 +1,14 @@
 """Стыковка модальностей и классификация проб (§9.5, §6.2 ТЗ).
 
-Три сигнала на пробу — поза, сустав, мышца — сводятся не в один индекс,
-а в согласованность между собой (§9.5). ΔMI считается отдельно и в PI/RI
-не суммируется; кондилография тоже отдельный сигнал.
+Четыре сигнала на пробу — поза, сустав, мышца, сила — сводятся не в один
+индекс, а в согласованность между собой (§9.5). ΔMI и ΔSI считаются отдельно
+и в PI/RI не суммируются; кондилография тоже отдельный сигнал.
+
+Сила добавлена четвёртой (Р-41): в этом протоколе одноимённые пробы ставятся
+на всех четырёх приборах, и держать myoline сессионной характеристикой значило
+бы стереть ровно тот эффект, ради которого её и измеряют. Голосовать в
+когерентности она при этом не начинает — направление «больше силы лучше» под
+пробой не установлено, см. `effects.coherence`.
 
 Классификация «лучшая / худшая / нейтральная» — это описание ИЗМЕРЕННОГО
 отклика, а не терапевтическое назначение: в режиме research движок правил
@@ -32,7 +38,7 @@ VERDICT_RU: dict[str, str] = {
 
 @dataclass(frozen=True, slots=True)
 class ModalitySignal:
-    """Один из трёх сигналов §9.5."""
+    """Один из четырёх сигналов §9.5."""
 
     available: bool
     delta: float | None
@@ -48,6 +54,7 @@ class ProbeSynthesis:
     posture: ModalitySignal
     joint: ModalitySignal
     muscle: ModalitySignal
+    strength: ModalitySignal
     coherence: str
     verdict: Verdict
     verdict_ru: str
@@ -63,6 +70,29 @@ def muscle_index(values: dict[str, float], bundle: ConfigBundle) -> float | None
     contributions: list[float] = []
     for code, value in values.items():
         if not code.startswith("EMG_RMS_"):
+            continue
+        sdc = bundle.thresholds.sdc(code)
+        if sdc:
+            contributions.append(abs(value) / sdc)
+    if not contributions:
+        return None
+    return round(sum(contributions) / len(contributions), 4)
+
+
+def strength_index(values: dict[str, float], bundle: ConfigBundle) -> float | None:
+    """SI — сводная изометрическая сила в единицах SDC (Р-41).
+
+    Устроен как MI и по той же причине: ньютоны разных групп мышц несравнимы
+    между собой напрямую, а в единицах собственного порога — сравнимы.
+    В PI/RI не суммируется: складывать ньютоны с миллиметрами бессмысленно.
+
+    Асимметрия в индекс НЕ входит: она уже безразмерна и имеет собственный
+    порог, а сложение «уровня» с «перекосом» дало бы величину, рост которой
+    нельзя истолковать.
+    """
+    contributions: list[float] = []
+    for code, value in values.items():
+        if not code.startswith("MYO_FORCE_"):
             continue
         sdc = bundle.thresholds.sdc(code)
         if sdc:
@@ -163,10 +193,41 @@ def synthesize_probe(
     else:
         muscle = ModalitySignal(False, None, False, "нет ЭМГ для этой пробы")
 
+    # ── Сила ─────────────────────────────────────────────────────────────────
+    si_threshold = bundle.thresholds.sdc("SI") or 1.0
+    trial_strength = _split(trial_values, bundle, "myoline")
+    base_strength = _split(baseline_values, bundle, "myoline")
+    si_trial = strength_index(trial_strength, bundle)
+    si_base = strength_index(base_strength, bundle)
+    asym_trial = trial_strength.get("MYO_ASYM_TRUNK_LAT")
+    asym_base = base_strength.get("MYO_ASYM_TRUNK_LAT")
+    asym_note = ("" if asym_trial is None or asym_base is None else
+                 f"; асимметрия {asym_base:+.1f}% → {asym_trial:+.1f}%")
+    if si_trial is not None and si_base is not None:
+        delta_si = round(si_trial - si_base, 4)
+        strength = ModalitySignal(
+            True, delta_si, abs(delta_si) >= si_threshold,
+            f"SI {si_base:.2f} → {si_trial:.2f}{asym_note}",
+            params=[param_effect(c, base_strength[c], trial_strength[c], bundle)
+                    for c in sorted(set(base_strength) & set(trial_strength))],
+        )
+    elif si_trial is not None:
+        strength = ModalitySignal(True, None, False,
+                                  f"SI {si_trial:.2f}, нейтрального измерения силы нет")
+    else:
+        strength = ModalitySignal(False, None, False, "нет myoline для этой пробы")
+
     # ── Когерентность и вердикт ──────────────────────────────────────────────
     from .effects import coherence as coherence_fn
 
-    coh = coherence_fn(posture.delta, joint.delta, muscle.delta, threshold)
+    # Сила голосует только если её направление установлено в реестре. Пока оно
+    # unknown, знак «согласия» назначить нечем (Р-18, Р-41).
+    strength_votes = any(
+        (s := bundle.registry.get(c)) and s.direction != "unknown"
+        for c in trial_strength if c.startswith("MYO_FORCE_")
+    )
+    coh = coherence_fn(posture.delta, joint.delta, muscle.delta, threshold,
+                       strength.delta, strength_votes=strength_votes)
 
     excursion = None
     if spec and spec.requires_excursion:
@@ -175,20 +236,21 @@ def synthesize_probe(
             max((v for c, v in trial_values.items() if c.startswith("CDG_MAX_EXCURSION")), default=None),
         )
 
-    verdict, rationale = _classify(posture, muscle, coh, direction_known, threshold, mi_threshold)
+    verdict, rationale = _classify(posture, muscle, strength, coh, direction_known,
+                                   threshold, mi_threshold, si_threshold)
 
     return ProbeSynthesis(
         probe_code=probe_code,
         label_ru=spec.label_ru if spec else probe_code,
-        posture=posture, joint=joint, muscle=muscle,
+        posture=posture, joint=joint, muscle=muscle, strength=strength,
         coherence=coh, verdict=verdict, verdict_ru=VERDICT_RU[verdict],
         excursion=excursion, rationale=rationale,
     )
 
 
 def _classify(
-    posture: ModalitySignal, muscle: ModalitySignal, coh: str,
-    direction_known: bool, threshold: float, mi_threshold: float,
+    posture: ModalitySignal, muscle: ModalitySignal, strength: ModalitySignal, coh: str,
+    direction_known: bool, threshold: float, mi_threshold: float, si_threshold: float,
 ) -> tuple[Verdict, str]:
     if not posture.available:
         # Отличать «поза не измерена» от «поза не изменилась» обязательно:
@@ -219,7 +281,12 @@ def _classify(
         if muscle.available and muscle.delta is not None and muscle.delta <= mi_threshold:
             parts.append("мышечная активность не растёт")
         if coh == "full":
-            parts.append("все три сигнала сходятся")
+            parts.append("все измеренные сигналы сходятся")
+        if strength.available and strength.delta is not None and abs(strength.delta) >= si_threshold:
+            # Сила показывается всегда, но без знака «лучше/хуже»: направление
+            # под пробой не установлено, и вердикт на неё не опирается (Р-41).
+            parts.append(f"сила меняется на {strength.delta:+.2f} SDC, "
+                         "направление не установлено")
         return "best", "; ".join(parts)
     return "worse", "поза ухудшается достоверно — в рекомендации не идёт никогда (Р-5)"
 
