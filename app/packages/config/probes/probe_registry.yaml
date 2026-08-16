@@ -13,6 +13,7 @@ probes:
     carryover_min: 0
     modes: [static]
     is_neutral: true
+    aliases: ["нейтраль без аппарата", "нейтраль б/а", "без аппарата"]
   - code: MAND_NEUTRAL_WITH_APPARATUS
     label_ru: "Нейтраль с аппаратом"
     group: reference
@@ -21,6 +22,7 @@ probes:
     carryover_min: 0
     modes: [static]
     is_neutral: true
+    aliases: ["нейтраль", "нейтраль с аппаратом", "покой", "исходное"]
   - code: MAND_CLENCH
     label_ru: "Сжатие зубов"
     group: mandibular
@@ -29,6 +31,7 @@ probes:
     carryover_min: 3
     modes: [static]
     requires_effort: true
+    aliases: ["сжатие", "сжатие зубов", "стискивание", "clench"]
   - code: MAND_PROTRUSION
     label_ru: "Протрузия"
     group: mandibular
@@ -37,6 +40,7 @@ probes:
     carryover_min: 3
     modes: [static]
     requires_excursion: true
+    aliases: ["протрузия", "выдвижение", "protrusion"]
   - code: MAND_RETRUSION
     label_ru: "Ретрузия"
     group: mandibular
@@ -45,6 +49,7 @@ probes:
     carryover_min: 3
     modes: [static]
     requires_excursion: true
+    aliases: ["ретрузия", "retrusion"]
   - code: MAND_LAT_LEFT
     label_ru: "Латеротрузия влево"
     group: mandibular
@@ -53,6 +58,7 @@ probes:
     carryover_min: 3
     modes: [static]
     requires_excursion: true
+    aliases: ["латеротрузия влево", "лев латеро", "лат влево"]
   - code: MAND_LAT_RIGHT
     label_ru: "Латеротрузия вправо"
     group: mandibular
@@ -61,6 +67,7 @@ probes:
     carryover_min: 3
     modes: [static]
     requires_excursion: true
+    aliases: ["латеротрузия вправо", "прав латеро", "лат вправо"]
   - code: MAND_OPEN
     label_ru: "Открывание"
     group: mandibular
@@ -69,6 +76,7 @@ probes:
     carryover_min: 3
     modes: [static]
     requires_excursion: true
+    aliases: ["открывание", "открытый рот", "opening"]
   - code: CTRL_TASK_NONORAL
     label_ru: "Контроль: внеротовая задача"
     group: mandibular
@@ -76,6 +84,7 @@ probes:
     settle_sec: 60
     carryover_min: 3
     modes: [static]
+    aliases: ["контроль внеротовой", "внеротовая задача"]
   - code: CTRL_TONGUE
     label_ru: "Контроль: положение языка"
     group: mandibular
@@ -83,6 +92,7 @@ probes:
     settle_sec: 60
     carryover_min: 3
     modes: [static]
+    aliases: ["язык", "положение языка"]
   - code: CTRL_SHAM_MANDIBULAR
     label_ru: "Sham: аппарат без терапевтического позиционирования"
     group: mandibular
@@ -91,6 +101,7 @@ probes:
     carryover_min: 15
     modes: [static]
     shams_group: mandibular
+    aliases: ["шам", "sham", "аппарат без позиционирования"]
   - code: CTRL_SHAM_PODAL
     label_ru: "Sham: клин нулевой толщины"
     group: podal
@@ -99,6 +110,7 @@ probes:
     carryover_min: 5
     modes: [static]
     shams_group: podal
+    aliases: ["шам клин", "клин нулевой"]
   - code: PODAL_WEDGE_L
     label_ru: "Клин слева"
     group: podal
@@ -106,6 +118,7 @@ probes:
     settle_sec: 120
     carryover_min: 5
     modes: [static]
+    aliases: ["клин слева", "клин лев"]
   - code: PODAL_WEDGE_R
     label_ru: "Клин справа"
     group: podal
@@ -113,6 +126,7 @@ probes:
     settle_sec: 120
     carryover_min: 5
     modes: [static]
+    aliases: ["клин справа", "клин прав"]
   - code: PODAL_HEEL_LIFT
     label_ru: "Подъём пятки"
     group: podal
@@ -120,6 +134,7 @@ probes:
     settle_sec: 120
     carryover_min: 5
     modes: [static]
+    aliases: ["подъём пятки", "подпяточник"]
   - code: PODAL_BAREFOOT_REF
     label_ru: "Босиком, опорная"
     group: podal
@@ -127,6 +142,7 @@ probes:
     settle_sec: 120
     carryover_min: 0
     modes: [static]
+    aliases: ["босиком", "без обуви"]
   - code: MAND_SPLINT_THERAPEUTIC
     label_ru: "Терапевтическая шина"
     group: mandibular
@@ -134,6 +150,7 @@ probes:
     settle_sec: 300
     carryover_min: 15
     modes: [static, dynamic]
+    aliases: ["терапевтическая шина", "тер шина", "шина тер"]
   - code: MAND_SPLINT_JOINT
     label_ru: "Суставная шина"
     group: mandibular
@@ -145,6 +162,7 @@ probes:
   # ── Условия окклюзии, как их обозначает клиника в протоколе прибора ────────
   # ВАЖНО: «лев окк» НЕ приравнивается к латеротрузии влево. Это разные условия,
   # и отождествить их — значит предрешить результат (Р-36). Отдельные коды.
+    aliases: ["суставная шина", "сустав шина"]
   - code: MAND_OCCLUSION_LEFT
     label_ru: "Левая окклюзия"
     group: mandibular
@@ -205,3 +223,14 @@ probes:
     modality: condylography
     requires_excursion: true
     aliases: ["медиотрузия вправо", "mediotrusion right"]
+  # Сессионное измерение, а не проба: изометрическая сила не является откликом
+  # на условие и в анализ проб не входит (§9.8 MUST).
+  - code: MYOLINE_SESSION
+    label_ru: "Изометрическая сила (сессионное измерение)"
+    group: strength
+    role: control
+    settle_sec: 0
+    carryover_min: 0
+    modes: [static]
+    modality: myoline
+    aliases: ["сила", "myoline", "изометрия"]

@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 
 from .db import engine
 from .models import Base
-from .routers import analyses, imports, meta, research, sessions
+from .routers import analyses, crossmodal, imports, ingest, meta, research, sessions
 from .services.bundle import bundle_from_settings
 from .settings import get_settings
 
@@ -95,4 +95,6 @@ app.include_router(meta.router)
 app.include_router(sessions.router)
 app.include_router(imports.router)
 app.include_router(analyses.router)
+app.include_router(ingest.router)
+app.include_router(crossmodal.router)
 app.include_router(research.router)

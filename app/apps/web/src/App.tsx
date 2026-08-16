@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { api, type Platform, type SessionOut } from "./lib/api";
+import { CrossModalScreen } from "./screens/CrossModal";
 import { Instrument } from "./screens/Instrument";
 import { Overview } from "./screens/Overview";
 import { Params } from "./screens/Params";
 import { Protocol } from "./screens/Protocol";
 import { Repeatability } from "./screens/Repeatability";
+import { Upload } from "./screens/Upload";
 import { SessionView } from "./screens/SessionView";
 
-type Tab = "overview" | "instrument" | "repeatability" | "protocol" | "params";
+type Tab = "overview" | "upload" | "compare" | "instrument" | "repeatability" | "protocol" | "params";
 type Theme = "auto" | "light" | "dark";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Обзор" },
+  { id: "upload", label: "Загрузка" },
+  { id: "compare", label: "Сравнение" },
   { id: "instrument", label: "Приборы" },
   { id: "repeatability", label: "Повторяемость" },
   { id: "protocol", label: "Протокол" },
@@ -27,9 +31,10 @@ export default function App() {
     () => (localStorage.getItem("diers-theme") as Theme) ?? "auto",
   );
 
+  const reload = () => { api.sessions().then(setSessions).catch(() => {}); };
   useEffect(() => {
     api.platform().then(setPlatform).catch(() => {});
-    api.sessions().then(setSessions).catch(() => {});
+    reload();
   }, []);
 
   /** §14.6: три состояния темы. «Авто» не ставит атрибут вовсе — тогда работает
@@ -86,6 +91,10 @@ export default function App() {
           <SessionView sessionId={session} onBack={() => setSession(null)} />
         ) : tab === "overview" ? (
           <Overview platform={platform} onOpen={setSession} />
+        ) : tab === "upload" ? (
+          <Upload sessions={sessions} onDone={reload} />
+        ) : tab === "compare" ? (
+          <CrossModalScreen sessions={sessions} />
         ) : tab === "instrument" ? (
           <Instrument sessions={sessions} />
         ) : tab === "repeatability" ? (

@@ -121,3 +121,43 @@ def test_excursion_cross_check_blocks_link_on_mismatch():
     assert match_excursion(22.0, 22.45).status == "matched"
     assert match_excursion(18.0, 22.45).status == "mismatch"
     assert match_excursion(None, 22.45).status == "absent"
+
+
+def test_emg_detector_does_not_hijack_formetric():
+    """Регрессия: заголовок формометрии содержит «Lateral Deviation rms», и маркер
+    RMS сам по себе перехватывал чужой формат. Признак — распознанные каналы."""
+    parser, _ = parse_blob((FIXTURES / "formetric_dicam_v4.csv").read_bytes())
+    assert parser.format_id == "formetric-csv-v4"
+
+
+def test_emg_wide_and_long_layouts():
+    parser, results = parse_blob((FIXTURES / "emg_wide.csv").read_bytes())
+    assert parser.format_id == "emg-csv-v1"
+    assert len(results) == 2                       # строка на условие
+    first = results[0]
+    assert first.raw_row["condition_label"] == "лев окк"
+    assert first.params["EMG_RMS_MASSETER_R"] == 51.7
+    assert first.params["EMG_ASYM_MASSETER"] == 30.03
+    # MUST §9.8: мкВ сравнимы только внутри сессии — флаг не декоративный
+    assert "emg_amplitude_session_scoped" in first.quality_flags
+
+    _, long_form = parse_blob((FIXTURES / "emg_long.csv").read_bytes())
+    assert long_form[0].params["EMG_RMS_TEMPORALIS_R"] == 20.4
+
+
+def test_myoline_excluded_from_probe_analysis():
+    """MUST §9.8: изометрическая сила в анализе проб не участвует."""
+    parser, results = parse_blob((FIXTURES / "myoline_force.csv").read_bytes())
+    assert parser.format_id == "myoline-csv-v1"
+    assert results[0].params["MYO_FORCE_TRUNK_EXT"] == 412.5
+    assert "myoline_not_in_probe_analysis" in results[0].quality_flags
+
+
+def test_channel_resolution_needs_muscle_and_side():
+    from importers.emg_csv import resolve_channel
+
+    assert resolve_channel("MASS_L") == ("MASSETER", "L")
+    assert resolve_channel("Masseter right") == ("MASSETER", "R")
+    assert resolve_channel("жев слева") == ("MASSETER", "L")
+    assert resolve_channel("Masseter") is None          # без стороны — не канал
+    assert resolve_channel("Lateral Deviation rms") is None

@@ -1,0 +1,935 @@
+# Реестр параметров (§7 ТЗ). Версионируется: registry_version входит в input_hash
+# и в проверку сопоставимости §12 (Р-3).
+#
+# 2026.2 — приведение к реальным протоколам приборов (Р-36):
+#   • SAGITTAL_IMBALANCE_VP_DM: mm → deg (прибор отдаёт «5° A»);
+#   • добавлены динамические параметры formetric Dynamic4D (макс. + размах);
+#   • добавлена модальность condylography (CADIAX 4), домен condylar.
+# 2026.3 — ЭМГ и myoline (Р-37):
+#   • EMG: RMS по каналам, домен muscle, in_pi: false — §9.5 держит мышцу
+#     отдельным сигналом, ΔMI не суммируется в постуральный индекс;
+#   • myoline (изометрическая сила): в анализе проб НЕ участвует (§9.8 MUST),
+#     заведена как ковариата для дозирования и проверки гипотез о модерации.
+# Смена версии обязательна: правка единиц и состава меняет результат при тех же
+# измерениях, а значит и input_hash, и сопоставимость визитов.
+#
+# direction: two_sided | higher_worse | lower_worse | unknown
+#   unknown — значение ПО УМОЛЧАНИЮ для нового параметра (Р-18). Такой параметр
+#   входит в RI по модулю, красится нейтрально, в правила не попадает.
+#   Смена на определённое направление требует ссылки на подтверждающий анализ.
+version: "2026.3"
+params:
+  TRUNK_IMBALANCE_VP_DM:
+    label_ru: "Дисбаланс туловища VP-DM"
+    modality: formetric
+    unit: mm
+    domain: frontal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  SAGITTAL_IMBALANCE_VP_DM:
+    label_ru: "Сагиттальный дисбаланс VP-DM"
+    modality: formetric
+    unit: deg          # исправлено по протоколу прибора: «5° A», не мм
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  LATERAL_DEVIATION_RMS:
+    label_ru: "Боковое отклонение, rms"
+    modality: formetric
+    unit: mm
+    domain: frontal
+    direction: higher_worse
+    in_pi: true
+    weight: 1.0
+    direction_evidence: "assumed_clinical, подтверждение не проводилось"
+  LATERAL_DEVIATION_MAX:
+    label_ru: "Боковое отклонение, max"
+    modality: formetric
+    unit: mm
+    domain: frontal
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  VERTEBRAL_ROTATION_RMS:
+    label_ru: "Ротация позвонков, rms"
+    modality: formetric
+    unit: deg
+    domain: rotation
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  VERTEBRAL_ROTATION_MAX:
+    label_ru: "Ротация позвонков, max"
+    modality: formetric
+    unit: deg
+    domain: rotation
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  SURFACE_ROTATION_RMS:
+    label_ru: "Поверхностная ротация, rms"
+    modality: formetric
+    unit: deg
+    domain: rotation
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  KYPHOTIC_ANGLE_ICT_ITL:
+    label_ru: "Угол кифоза ICT-ITL"
+    modality: formetric
+    unit: deg
+    domain: sagittal
+    direction: two_sided
+    in_pi: true
+    weight: 1.0
+  LORDOTIC_ANGLE_ITL_ILS:
+    label_ru: "Угол лордоза ITL-ILS"
+    modality: formetric
+    unit: deg
+    domain: sagittal
+    direction: two_sided
+    in_pi: true
+    weight: 1.0
+  PELVIC_OBLIQUITY_DL_DR:
+    label_ru: "Перекос таза DL-DR"
+    modality: formetric
+    unit: mm
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  PELVIC_TORSION:
+    label_ru: "Торсия таза"
+    modality: formetric
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  PELVIC_ROTATION:
+    label_ru: "Ротация таза"
+    modality: formetric
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  PELVIC_TILT:
+    label_ru: "Наклон таза"
+    modality: formetric
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  TRUNK_INCLINATION:
+    label_ru: "Наклон туловища"
+    modality: formetric
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  LOAD_SHARE_LEFT:
+    label_ru: "Доля нагрузки, лево"
+    modality: pedoscan
+    unit: pct
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  LOAD_SHARE_RIGHT:
+    label_ru: "Доля нагрузки, право"
+    modality: pedoscan
+    unit: pct
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  COP_PATH_LENGTH:
+    label_ru: "Длина пути ЦД"
+    modality: pedoscan
+    unit: mm
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  COP_AREA:
+    label_ru: "Площадь ЦД"
+    modality: pedoscan
+    unit: mm2
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  LEG_AXIS_VARUS_VALGUS_L:
+    label_ru: "Ось ноги, варус/вальгус, лево"
+    modality: leg_axis
+    unit: deg
+    domain: leg_axis
+    direction: unknown
+    in_pi: false          # структурный домен, в PI и RI не входит (§9.2)
+    weight: 0.0
+  LEG_AXIS_VARUS_VALGUS_R:
+    label_ru: "Ось ноги, варус/вальгус, право"
+    modality: leg_axis
+    unit: deg
+    domain: leg_axis
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+
+  # ── formetric Dynamic4D ────────────────────────────────────────────────────
+  # Динамика на дорожке — ДРУГОЙ измеряемый признак, чем статика: значение
+  # максимума за цикл шага и размах движения. Смешивать со статическими кодами
+  # нельзя, это разные величины при одинаковом названии.
+  # Скорость дорожки — условие пробы, живёт в trials.platform_config.
+  DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX:
+    label_ru: "Угол кифоза ICT-ITL, макс. (динамика)"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM:
+    label_ru: "Угол кифоза ICT-ITL, размах движения"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 0.7
+  DYN_LORDOTIC_ANGLE_ITL_ILS_MAX:
+    label_ru: "Угол лордоза ITL-ILS, макс. (динамика)"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  DYN_LORDOTIC_ANGLE_ITL_ILS_ROM:
+    label_ru: "Угол лордоза ITL-ILS, размах движения"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 0.7
+  DYN_PELVIC_ROTATION:
+    label_ru: "Ротация таза (динамика)"
+    modality: formetric_dynamic
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  DYN_PELVIC_ROTATION_ROM:
+    label_ru: "Ротация таза, размах движения"
+    modality: formetric_dynamic
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 0.7
+  DYN_PELVIC_OBLIQUITY:
+    label_ru: "Перекос таза (динамика)"
+    modality: formetric_dynamic
+    unit: mm
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  DYN_PELVIC_OBLIQUITY_ROM:
+    label_ru: "Перекос таза, размах движения"
+    modality: formetric_dynamic
+    unit: mm
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 0.7
+  DYN_SAGITTAL_IMBALANCE_VP_DM:
+    label_ru: "Сагиттальный дисбаланс VP-DM (динамика)"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  DYN_SAGITTAL_IMBALANCE_VP_DM_ROM:
+    label_ru: "Сагиттальный дисбаланс VP-DM, размах"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 0.7
+
+  # ── Кондилография CADIAX 4 ─────────────────────────────────────────────────
+  # Сустав — ОТДЕЛЬНЫЙ сигнал (§9.5), в постуральный индекс не суммируется.
+  # Сторона кодируется суффиксом _R/_L, как у оси ноги.
+  CDG_MAX_EXCURSION_R:
+    label_ru: "Макс. экскурсия мыщелка, справа"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_RETRAL_STABILITY_R:
+    label_ru: "Ретральная стабильность, финал, справа"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_START_END_DIFF_R:
+    label_ru: "Расхождение начала и конца, справа"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_MAX_SPEED_R:
+    label_ru: "Макс. скорость движения, справа"
+    modality: condylography
+    unit: mm_per_sec
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_KOBS_R:
+    label_ru: "Коэффициент прямолинейности Kobs, справа"
+    modality: condylography
+    unit: ratio
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_HARMONY_R:
+    label_ru: "Гармония трансляции и ротации, справа"
+    modality: condylography
+    unit: deg_per_mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_3MM_R:
+    label_ru: "SCI на 3 мм, справа"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_TCI_3MM_R:
+    label_ru: "TCI на 3 мм, справа"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_REPRODUCIBILITY_3MM_R:
+    label_ru: "Воспроизводимость на 3 мм, справа"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_5MM_R:
+    label_ru: "SCI на 5 мм, справа"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_TCI_5MM_R:
+    label_ru: "TCI на 5 мм, справа"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_REPRODUCIBILITY_5MM_R:
+    label_ru: "Воспроизводимость на 5 мм, справа"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_10MM_R:
+    label_ru: "SCI на 10 мм, справа"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_TCI_10MM_R:
+    label_ru: "TCI на 10 мм, справа"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_REPRODUCIBILITY_10MM_R:
+    label_ru: "Воспроизводимость на 10 мм, справа"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_MAX_EXCURSION_L:
+    label_ru: "Макс. экскурсия мыщелка, слева"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_RETRAL_STABILITY_L:
+    label_ru: "Ретральная стабильность, финал, слева"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_START_END_DIFF_L:
+    label_ru: "Расхождение начала и конца, слева"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_MAX_SPEED_L:
+    label_ru: "Макс. скорость движения, слева"
+    modality: condylography
+    unit: mm_per_sec
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_KOBS_L:
+    label_ru: "Коэффициент прямолинейности Kobs, слева"
+    modality: condylography
+    unit: ratio
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_HARMONY_L:
+    label_ru: "Гармония трансляции и ротации, слева"
+    modality: condylography
+    unit: deg_per_mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_3MM_L:
+    label_ru: "SCI на 3 мм, слева"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_TCI_3MM_L:
+    label_ru: "TCI на 3 мм, слева"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_REPRODUCIBILITY_3MM_L:
+    label_ru: "Воспроизводимость на 3 мм, слева"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_5MM_L:
+    label_ru: "SCI на 5 мм, слева"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_TCI_5MM_L:
+    label_ru: "TCI на 5 мм, слева"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_REPRODUCIBILITY_5MM_L:
+    label_ru: "Воспроизводимость на 5 мм, слева"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_10MM_L:
+    label_ru: "SCI на 10 мм, слева"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_TCI_10MM_L:
+    label_ru: "TCI на 10 мм, слева"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_REPRODUCIBILITY_10MM_L:
+    label_ru: "Воспроизводимость на 10 мм, слева"
+    modality: condylography
+    unit: mm
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_QUANTITY_SYMMETRY:
+    label_ru: "Симметрия экскурсии, право/лево"
+    modality: condylography
+    unit: pct
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_SYMMETRY_3MM:
+    label_ru: "Симметрия SCI на 3 мм, право/лево"
+    modality: condylography
+    unit: pct
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_SYMMETRY_5MM:
+    label_ru: "Симметрия SCI на 5 мм, право/лево"
+    modality: condylography
+    unit: pct
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_SCI_SYMMETRY_10MM:
+    label_ru: "Симметрия SCI на 10 мм, право/лево"
+    modality: condylography
+    unit: pct
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_HINGE_AXIS_ANGLE:
+    label_ru: "Угол шарнирной оси, одновременность"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  CDG_MAX_ROTATION_GAMMA:
+    label_ru: "Макс. угол ротации Gamma"
+    modality: condylography
+    unit: deg
+    domain: condylar
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+
+  # ── Границы размаха и условия пробы ────────────────────────────────────────
+  # В индекс не входят: размах уже учтён отдельным параметром, а скорость
+  # дорожки — условие, а не измерение.
+  DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM_MIN:
+    label_ru: "Угол кифоза ICT-ITL, нижняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM_MAX:
+    label_ru: "Угол кифоза ICT-ITL, верхняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_LORDOTIC_ANGLE_ITL_ILS_ROM_MIN:
+    label_ru: "Угол лордоза ITL-ILS, нижняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_LORDOTIC_ANGLE_ITL_ILS_ROM_MAX:
+    label_ru: "Угол лордоза ITL-ILS, верхняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_PELVIC_ROTATION_ROM_MIN:
+    label_ru: "Ротация таза, нижняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_PELVIC_ROTATION_ROM_MAX:
+    label_ru: "Ротация таза, верхняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_PELVIC_OBLIQUITY_ROM_MIN:
+    label_ru: "Перекос таза, нижняя граница размаха"
+    modality: formetric_dynamic
+    unit: mm
+    domain: pelvis
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_PELVIC_OBLIQUITY_ROM_MAX:
+    label_ru: "Перекос таза, верхняя граница размаха"
+    modality: formetric_dynamic
+    unit: mm
+    domain: pelvis
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_SAGITTAL_IMBALANCE_VP_DM_ROM_MIN:
+    label_ru: "Сагиттальный дисбаланс VP-DM, нижняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  DYN_SAGITTAL_IMBALANCE_VP_DM_ROM_MAX:
+    label_ru: "Сагиттальный дисбаланс VP-DM, верхняя граница размаха"
+    modality: formetric_dynamic
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: false        # границы описывают размах, сам размах уже в индексе
+    weight: 0.0
+  GAIT_SPEED_KMH:
+    label_ru: "Скорость дорожки"
+    modality: formetric_dynamic
+    unit: km_per_h
+    domain: condition
+    direction: unknown
+    in_pi: false        # условие пробы, не измеряемая величина
+    weight: 0.0
+
+  # ── ЭМГ ────────────────────────────────────────────────────────────────────
+  # §9.5: мышца — ТРЕТИЙ сигнал наравне с позой и суставом. ΔMI считается
+  # отдельным индексом и в постуральный индекс не суммируется (in_pi: false).
+  # MUST §9.8: амплитуды в мкВ сравнимы ТОЛЬКО внутри одной сессии — электроды
+  # между сессиями переклеиваются. Межсессионная динамика ЭМГ без нормализации
+  # не отображается вовсе.
+  EMG_RMS_MASSETER_L:
+    label_ru: "ЭМГ RMS, жевательная слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_MASSETER_R:
+    label_ru: "ЭМГ RMS, жевательная справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_MASSETER:
+    label_ru: "ЭМГ асимметрия, жевательная"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_TEMPORALIS_L:
+    label_ru: "ЭМГ RMS, височная передняя слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_TEMPORALIS_R:
+    label_ru: "ЭМГ RMS, височная передняя справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_TEMPORALIS:
+    label_ru: "ЭМГ асимметрия, височная передняя"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_SCM_L:
+    label_ru: "ЭМГ RMS, грудино-ключично-сосцевидная слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_SCM_R:
+    label_ru: "ЭМГ RMS, грудино-ключично-сосцевидная справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_SCM:
+    label_ru: "ЭМГ асимметрия, грудино-ключично-сосцевидная"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_TRAPEZIUS_L:
+    label_ru: "ЭМГ RMS, трапециевидная верхняя слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_TRAPEZIUS_R:
+    label_ru: "ЭМГ RMS, трапециевидная верхняя справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_TRAPEZIUS:
+    label_ru: "ЭМГ асимметрия, трапециевидная верхняя"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_ERECTOR_SPINAE_L:
+    label_ru: "ЭМГ RMS, выпрямитель спины слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_ERECTOR_SPINAE_R:
+    label_ru: "ЭМГ RMS, выпрямитель спины справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_ERECTOR_SPINAE:
+    label_ru: "ЭМГ асимметрия, выпрямитель спины"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_QUADRATUS_LUMBORUM_L:
+    label_ru: "ЭМГ RMS, квадратная мышцы поясницы слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_QUADRATUS_LUMBORUM_R:
+    label_ru: "ЭМГ RMS, квадратная мышцы поясницы справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_QUADRATUS_LUMBORUM:
+    label_ru: "ЭМГ асимметрия, квадратная мышцы поясницы"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_GLUTEUS_MAXIMUS_L:
+    label_ru: "ЭМГ RMS, большая ягодичная слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_GLUTEUS_MAXIMUS_R:
+    label_ru: "ЭМГ RMS, большая ягодичная справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_GLUTEUS_MAXIMUS:
+    label_ru: "ЭМГ асимметрия, большая ягодичная"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_RECTUS_FEMORIS_L:
+    label_ru: "ЭМГ RMS, прямая мышца бедра слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_RECTUS_FEMORIS_R:
+    label_ru: "ЭМГ RMS, прямая мышца бедра справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_RECTUS_FEMORIS:
+    label_ru: "ЭМГ асимметрия, прямая мышца бедра"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_TIBIALIS_ANTERIOR_L:
+    label_ru: "ЭМГ RMS, передняя большеберцовая слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_TIBIALIS_ANTERIOR_R:
+    label_ru: "ЭМГ RMS, передняя большеберцовая справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_TIBIALIS_ANTERIOR:
+    label_ru: "ЭМГ асимметрия, передняя большеберцовая"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  EMG_RMS_GASTROCNEMIUS_L:
+    label_ru: "ЭМГ RMS, икроножная слева"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_RMS_GASTROCNEMIUS_R:
+    label_ru: "ЭМГ RMS, икроножная справа"
+    modality: emg
+    unit: uV
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 1.0
+  EMG_ASYM_GASTROCNEMIUS:
+    label_ru: "ЭМГ асимметрия, икроножная"
+    modality: emg
+    unit: pct
+    domain: muscle
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+
+  # ── Myoline: изометрическая сила ───────────────────────────────────────────
+  # MUST §9.8: в анализе проб НЕ участвует. Здесь — ковариата для дозирования
+  # программы и для проверки гипотезы «сильные отвечают иначе» (Р-35, слой 3).
+  MYO_FORCE_TRUNK_EXT:
+    label_ru: "Изометрическая сила, разгибатели туловища"
+    modality: myoline
+    unit: N
+    domain: strength
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  MYO_FORCE_TRUNK_FLEX:
+    label_ru: "Изометрическая сила, сгибатели туловища"
+    modality: myoline
+    unit: N
+    domain: strength
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  MYO_FORCE_TRUNK_LAT_L:
+    label_ru: "Изометрическая сила, боковой наклон влево"
+    modality: myoline
+    unit: N
+    domain: strength
+    direction: unknown
+    in_pi: false
+    weight: 0.0
+  MYO_FORCE_TRUNK_LAT_R:
+    label_ru: "Изометрическая сила, боковой наклон вправо"
+    modality: myoline
+    unit: N
+    domain: strength
+    direction: unknown
+    in_pi: false
+    weight: 0.0

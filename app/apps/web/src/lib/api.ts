@@ -113,7 +113,48 @@ export const api = {
   protocolAnalytics: () => call<any>("/research/protocol-analytics"),
   progress: () => call<any>("/research/progress"),
   measurements: (id: string) => call<Measurements>(`/sessions/${id}/measurements`),
+  crossmodal: (id: string) => call<CrossModal>(`/sessions/${id}/crossmodal`),
+  autoIngest: async (id: string, files: File[]) => {
+    const form = new FormData();
+    files.forEach((f) => form.append("files", f));
+    const a = getActor();
+    const res = await fetch(`${BASE}/sessions/${id}/auto-ingest`, {
+      method: "POST", body: form,
+      headers: { "X-Actor-Ref": a.ref, "X-Actor-Role": a.role },
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : "ошибка загрузки");
+    return body as IngestReport;
+  },
 };
+
+export interface Signal { available: boolean; delta: number | null; reliable: boolean; detail: string }
+export interface ProbeSynthesis {
+  probe_code: string; label_ru: string;
+  posture: Signal; joint: Signal; muscle: Signal;
+  coherence: string; verdict: string; verdict_ru: string; rationale: string;
+  excursion: { status: string; delta_mm: number | null; message: string } | null;
+  params: { code: string; label_ru: string; delta: number; effect_size: number | null;
+            confidence: Confidence; direction: Direction;
+            interpretation: "improving" | "worsening" | null }[];
+}
+export interface CrossModal {
+  session_id: string;
+  modalities: Record<string, string[]>;
+  session_level?: { myoline: Record<string, number>; note: string };
+  probes: ProbeSynthesis[];
+  ranking: Record<string, string[]>;
+  note?: string;
+  warning?: string;
+}
+export interface IngestFile {
+  filename: string; status: string; modality: string | null; format_id: string | null;
+  condition_label: string | null; probe_code: string | null; params: number; reason: string | null;
+}
+export interface IngestReport {
+  session_id: string; files: IngestFile[];
+  summary: { ingested: number; needs_assignment: number; unrecognized: number; duplicates: number };
+}
 
 export interface MeasuredParam {
   code: string; value: number; label_ru: string; unit: string;
