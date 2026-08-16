@@ -4,7 +4,8 @@
 
 ## Документы
 
-- [Модуль анализа данных DIERS — распакованное ТЗ](./docs/diers/README.md) —
-  ТЗ и четыре приложения (модель данных, контракт API, формат CSV/DICAM,
-  реестр дефектов), реконструированные из реализации в
-  `Anton-ogma/fitmed-ecosystem@3a028f0`.
+- [**Постуральный модуль DIERS**](./docs/diers/README.md)
+  - [ТЗ на реализацию v1.0](./docs/diers/TZ-postural-module-v1.0.md) — целевое техническое задание
+  - [Сопоставление ТЗ ↔ реализация](./docs/diers/gap-analysis.md) — разрыв, переиспользуемое, конфликты, блокеры
+  - [Существующий модуль в fitmed-ecosystem (as-is)](./docs/diers/as-is/README.md) — разбор
+    унаследованного кода `Anton-ogma/fitmed-ecosystem@3a028f0`
