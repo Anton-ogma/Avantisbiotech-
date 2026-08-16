@@ -12,14 +12,16 @@ import { SessionView } from "./screens/SessionView";
 type Tab = "overview" | "upload" | "compare" | "instrument" | "repeatability" | "protocol" | "params";
 type Theme = "auto" | "light" | "dark";
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Обзор" },
-  { id: "upload", label: "Загрузка" },
-  { id: "compare", label: "Сравнение" },
-  { id: "instrument", label: "Приборы" },
-  { id: "repeatability", label: "Повторяемость" },
-  { id: "protocol", label: "Протокол" },
-  { id: "params", label: "Параметры" },
+/** short — подпись для нижней панели телефона: семь полных названий туда
+ *  не помещаются, и вкладки уезжают за край вместо того, чтобы быть видимыми. */
+const TABS: { id: Tab; label: string; short: string }[] = [
+  { id: "overview", label: "Обзор", short: "Обзор" },
+  { id: "upload", label: "Загрузка", short: "Файлы" },
+  { id: "compare", label: "Сравнение", short: "Пробы" },
+  { id: "instrument", label: "Приборы", short: "Приборы" },
+  { id: "repeatability", label: "Повторяемость", short: "Повтор" },
+  { id: "protocol", label: "Протокол", short: "Метод" },
+  { id: "params", label: "Параметры", short: "Реестр" },
 ];
 
 export default function App() {
@@ -45,8 +47,31 @@ export default function App() {
     else document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  const themeSwitch = (compact = false) => (
+    <div className={`segmented ${compact ? "theme-compact" : ""}`} role="group" aria-label="Тема">
+      {(["auto", "light", "dark"] as Theme[]).map((t) => (
+        <button key={t} aria-pressed={theme === t} onClick={() => setTheme(t)}>
+          {t === "auto" ? "Авто" : t === "light" ? "Светлая" : "Тёмная"}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <div className="app">
+      {/* Шапка появляется на планшете и телефоне: там нет боковой панели,
+          и без неё сменить тему было бы нечем. */}
+      <header className="topbar">
+        <div className="brand">
+          <div className="brand-mark" aria-hidden>D</div>
+          <div>
+            <div className="brand-name">DIERS</div>
+            <div className="brand-sub">постуральный модуль</div>
+          </div>
+        </div>
+        {themeSwitch(true)}
+      </header>
+
       <nav className="sidebar" aria-label="Основная навигация">
         <div className="brand">
           <div className="brand-mark" aria-hidden>D</div>
@@ -63,19 +88,14 @@ export default function App() {
                   aria-current={tab === t.id && !session ? "page" : undefined}
                   onClick={() => { setTab(t.id); setSession(null); }}>
             <span className="dot" aria-hidden />
-            {t.label}
+            <span className="nav-full">{t.label}</span>
+            <span className="nav-short">{t.short}</span>
           </button>
         ))}
 
         <div className="theme-row">
           <div className="tile-label" style={{ marginBottom: 8 }}>Тема</div>
-          <div className="segmented">
-            {(["auto", "light", "dark"] as Theme[]).map((t) => (
-              <button key={t} aria-pressed={theme === t} onClick={() => setTheme(t)}>
-                {t === "auto" ? "Авто" : t === "light" ? "Светлая" : "Тёмная"}
-              </button>
-            ))}
-          </div>
+          {themeSwitch()}
           {platform && (
             <div className="mono" style={{ marginTop: 12, lineHeight: 1.6 }}>
               реестр {platform.versions.registry_version}<br />

@@ -119,12 +119,12 @@ export function SignalTriad({ posture, joint, muscle, threshold }: {
   posture: number | null; joint: number | null; muscle: number | null; threshold: number;
 }) {
   const rows = [
-    { key: "поза", value: posture, hint: "Δ индекса отзывчивости" },
-    { key: "сустав", value: joint, hint: "изменение асимметрии мыщелков, %" },
-    { key: "мышца", value: muscle, hint: "ΔMI, отдельный индекс" },
+    { key: "поза", value: posture, hint: "Δ индекса" },
+    { key: "сустав", value: joint, hint: "Δ асимметрии, %" },
+    { key: "мышца", value: muscle, hint: "ΔMI" },
   ];
   const scale = Math.max(threshold * 2.4, ...rows.map((r) => Math.abs(r.value ?? 0)) ) * 1.12;
-  const W = 720, padL = 92, rowH = 34, H = rows.length * rowH + 26;
+  const W = 720, padL = 128, rowH = 34, H = rows.length * rowH + 26;
   const plot = W - padL - 90;
   const x = (v: number) => padL + plot / 2 + (v / scale) * (plot / 2);
 

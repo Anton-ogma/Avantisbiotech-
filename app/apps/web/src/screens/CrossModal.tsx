@@ -155,8 +155,8 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
             <>
               <div className="section-title">Три сигнала пробы</div>
               <Card>
-                <SignalTriad posture={current.posture.delta} joint={current.joint.delta}
-                             muscle={current.muscle.delta} threshold={2.0} />
+                <div className="chart-scroll"><SignalTriad posture={current.posture.delta} joint={current.joint.delta}
+                             muscle={current.muscle.delta} threshold={2.0} /></div>
                 <div className="grid cols-3" style={{ marginTop: 12 }}>
                   {(["posture", "joint", "muscle"] as const).map((k) => (
                     <div key={k} className="tile-hint">
@@ -170,7 +170,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
               {current.posture.available && current.params.length > 0 && (
                 <>
                   <div className="section-title">Формометрия · параметры</div>
-                  <Card><DeltaChart params={current.params as any} /></Card>
+                  <Card><div className="chart-scroll"><DeltaChart params={current.params as any} /></div></Card>
                 </>
               )}
 
@@ -178,7 +178,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                 <>
                   <div className="section-title">ЭМГ · каналы по сторонам</div>
                   <Card>
-                    <EmgMirror channels={emg} />
+                    <div className="chart-scroll"><EmgMirror channels={emg} /></div>
                     <p className="tile-hint">
                       Амплитуды в мкВ сравнимы только внутри одной сессии: между сессиями
                       электроды переклеиваются, и межсессионная динамика без нормализации
@@ -192,7 +192,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                 <>
                   <div className="section-title">Кондилография · профиль суставного угла</div>
                   <Card>
-                    <CondylarProfile metrics={condylar} />
+                    <div className="chart-scroll"><CondylarProfile metrics={condylar} /></div>
                     <p className="tile-hint">
                       Расхождение кривых сторон и есть суставной сигнал. В постуральный
                       индекс он не суммируется — это отдельная из трёх составляющих.

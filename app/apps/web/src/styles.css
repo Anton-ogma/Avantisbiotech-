@@ -161,6 +161,7 @@ body::after {
   border-color: var(--stroke-strong);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.08);
 }
+.nav-short { display: none; }
 .nav-item .dot {
   width: 7px; height: 7px; border-radius: 50%; flex: none;
   background: linear-gradient(140deg, var(--accent), var(--accent-2)); opacity: 0.35;
@@ -168,6 +169,8 @@ body::after {
 .nav-item[aria-current="page"] .dot { opacity: 1; box-shadow: 0 0 10px var(--accent-glow); }
 
 .theme-row { margin-top: auto; padding-top: 14px; }
+.theme-compact { margin-left: auto; }
+.theme-compact button { padding: 6px 10px; font-size: 11.5px; }
 
 /* ── Контент ───────────────────────────────────────────────────────────── */
 .main { padding: 34px 34px 80px; max-width: 1240px; }
@@ -266,17 +269,102 @@ button.pill[aria-pressed="true"] {
 .fade-in { animation: fade 0.4s var(--spring) both; }
 @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
+/* ── Раскладки §14.6 ────────────────────────────────────────────────────────
+   Компьютер  > 1024  — боковая навигация
+   Планшет  701…1024  — горизонтальная навигация под шапкой
+   Телефон    ≤ 700   — вертикальные строки, нижняя панель вкладок
+   Переключатель темы доступен во всех трёх: на телефоне он в шапке,
+   иначе сменить тему на телефоне было бы нечем.                            */
+
+/* Шапка: только для планшета и телефона */
+.topbar { display: none; }
+
 @media (max-width: 1024px) {
   .app { grid-template-columns: 1fr; }
-  .sidebar {
-    position: fixed; bottom: 0; top: auto; left: 0; right: 0; height: auto;
-    flex-direction: row; overflow-x: auto; padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
-    border-right: none; border-top: 1px solid var(--stroke); z-index: 20;
+
+  .topbar {
+    position: sticky; top: 0; z-index: 30;
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px calc(10px + env(safe-area-inset-top));
+    border-bottom: 1px solid var(--stroke);
+    background: var(--surface-2);
+    backdrop-filter: blur(24px) saturate(160%);
   }
-  .brand, .theme-row { display: none; }
-  .nav-item { flex-direction: column; gap: 4px; font-size: 11px; padding: 8px 12px; min-width: 76px;
-    align-items: center; text-align: center; }
-  .main { padding: 22px 18px 110px; }
-  .title { font-size: 27px; }
+  .topbar .brand { padding: 0; }
+  .topbar .brand-sub { display: none; }
+
+  .sidebar {
+    position: sticky; top: 56px; height: auto; z-index: 25;
+    flex-direction: row; gap: 4px;
+    padding: 8px 12px;
+    overflow-x: auto; scrollbar-width: none;
+    border-right: none; border-bottom: 1px solid var(--stroke);
+  }
+  .sidebar::-webkit-scrollbar { display: none; }
+  .sidebar .brand, .sidebar .theme-row { display: none; }
+  .nav-item {
+    flex: 1 1 auto; white-space: nowrap; padding: 8px 10px;
+    justify-content: center; font-size: 13px;
+  }
+  .nav-full { display: none; }
+  .nav-short { display: inline; }
+
+  .main { padding: 20px 16px 44px; }
+  .title { font-size: 28px; }
 }
+
+@media (max-width: 700px) {
+  .topbar { top: 0; }
+
+  /* Нижняя панель вкладок: большой палец достаёт, содержимое не перекрыто */
+  .sidebar {
+    position: fixed; inset: auto 0 0 0; top: auto; height: auto; z-index: 30;
+    gap: 0;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+    border-bottom: none; border-top: 1px solid var(--stroke);
+    overflow-x: visible;
+  }
+  /* Семь вкладок на 390 px помещаются только с короткими подписями —
+     иначе панель уезжает за край и видна одна вкладка. */
+  .nav-item {
+    flex-direction: column; align-items: center; gap: 3px;
+    font-size: 10px; padding: 6px 2px; min-width: 0; flex: 1 1 0;
+    text-align: center; letter-spacing: -0.01em;
+  }
+  .nav-item[aria-current="page"] { box-shadow: none; }
+  .nav-item .dot { width: 5px; height: 5px; }
+  .nav-full { display: none; }
+  .nav-short { display: inline; }
+
+  .main { padding: 16px 14px calc(96px + env(safe-area-inset-bottom)); }
+  .title { font-size: 24px; letter-spacing: -0.02em; }
+  .subtitle { font-size: 13px; }
+  .card { padding: 15px; border-radius: 18px; }
+
+  /* Плитки — вертикальными строками, а не сжатой сеткой */
+  .grid.cols-2, .grid.cols-3, .grid.cols-4 { grid-template-columns: 1fr; }
+  .tile-value { font-size: 24px; }
+
+  /* Ряд с селектором: подпись сверху, контрол на всю ширину */
+  .row > select.pill { width: 100%; min-width: 0 !important; }
+}
+
+/* Ничто из содержимого не выталкивает страницу вбок: широкое прокручивается
+   внутри своего контейнера (§14.2, п. 7 — колонки не прячутся).
+   Правило действует на любой ширине: боковая панель забирает 260 px, и на
+   узком ноутбуке ряд проб выталкивал страницу так же, как на планшете.       */
+.segmented { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.segmented::-webkit-scrollbar { display: none; }
+.segmented button { white-space: nowrap; flex: none; }
+.row { min-width: 0; }
+.card, .grid, .main, .app { min-width: 0; }
+.main { max-width: min(1240px, 100%); }
+
+/* График не сжимается до нечитаемого: у него своя прокрутка, как у таблицы */
+.chart-scroll { overflow-x: auto; margin: 0 -2px; }
+@media (max-width: 700px) {
+  .chart-scroll .chart { min-width: 560px; }
+  .table-wrap table { min-width: 520px; }
+}
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

@@ -83,7 +83,7 @@ export function SessionView({ sessionId, onBack }: { sessionId: string; onBack: 
         </div>
         {selected ? (
           <>
-            <DeltaChart params={selected.params} />
+            <div className="chart-scroll"><DeltaChart params={selected.params} /></div>
             <div className="table-wrap" style={{ marginTop: 18 }}>
               <table>
                 <thead>
