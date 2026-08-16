@@ -1,16 +1,18 @@
 import { useEffect, useState } from "react";
-import { api, type Platform } from "./lib/api";
+import { api, type Platform, type SessionOut } from "./lib/api";
+import { Instrument } from "./screens/Instrument";
 import { Overview } from "./screens/Overview";
 import { Params } from "./screens/Params";
 import { Protocol } from "./screens/Protocol";
 import { Repeatability } from "./screens/Repeatability";
 import { SessionView } from "./screens/SessionView";
 
-type Tab = "overview" | "repeatability" | "protocol" | "params";
+type Tab = "overview" | "instrument" | "repeatability" | "protocol" | "params";
 type Theme = "auto" | "light" | "dark";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "overview", label: "Обзор" },
+  { id: "instrument", label: "Приборы" },
   { id: "repeatability", label: "Повторяемость" },
   { id: "protocol", label: "Протокол" },
   { id: "params", label: "Параметры" },
@@ -20,11 +22,15 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("overview");
   const [session, setSession] = useState<string | null>(null);
   const [platform, setPlatform] = useState<Platform | null>(null);
+  const [sessions, setSessions] = useState<SessionOut[]>([]);
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem("diers-theme") as Theme) ?? "auto",
   );
 
-  useEffect(() => { api.platform().then(setPlatform).catch(() => {}); }, []);
+  useEffect(() => {
+    api.platform().then(setPlatform).catch(() => {});
+    api.sessions().then(setSessions).catch(() => {});
+  }, []);
 
   /** §14.6: три состояния темы. «Авто» не ставит атрибут вовсе — тогда работает
    *  системная настройка через prefers-color-scheme. */
@@ -80,6 +86,8 @@ export default function App() {
           <SessionView sessionId={session} onBack={() => setSession(null)} />
         ) : tab === "overview" ? (
           <Overview platform={platform} onOpen={setSession} />
+        ) : tab === "instrument" ? (
+          <Instrument sessions={sessions} />
         ) : tab === "repeatability" ? (
           <Repeatability />
         ) : tab === "protocol" ? (

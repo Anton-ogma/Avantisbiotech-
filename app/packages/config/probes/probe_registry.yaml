@@ -141,3 +141,67 @@ probes:
     settle_sec: 300
     carryover_min: 15
     modes: [static, dynamic]
+
+  # ── Условия окклюзии, как их обозначает клиника в протоколе прибора ────────
+  # ВАЖНО: «лев окк» НЕ приравнивается к латеротрузии влево. Это разные условия,
+  # и отождествить их — значит предрешить результат (Р-36). Отдельные коды.
+  - code: MAND_OCCLUSION_LEFT
+    label_ru: "Левая окклюзия"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 90
+    carryover_min: 3
+    modes: [static, dynamic]
+    aliases: ["лев окк", "левая окклюзия", "окклюзия слева"]
+  - code: MAND_OCCLUSION_RIGHT
+    label_ru: "Правая окклюзия"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 90
+    carryover_min: 3
+    modes: [static, dynamic]
+    aliases: ["прав окк", "правая окклюзия", "окклюзия справа"]
+
+  # ── Движения кондилографии CADIAX 4 ───────────────────────────────────────
+  # Сопоставление с формометрией — уровень M (§6.2): по коду пробы, со сверкой
+  # excursion_mm. Источник величины — QUANTITY / Maximum excursion distance.
+  - code: CDG_OPEN_CLOSE
+    label_ru: "Открывание/закрывание"
+    group: condylography
+    role: diagnostic
+    settle_sec: 0
+    carryover_min: 0
+    modes: [dynamic]
+    modality: condylography
+    requires_excursion: true
+    aliases: ["открывание/закрывание", "opening/closing"]
+  - code: CDG_PROTRUSION_RETRUSION
+    label_ru: "Протрузия/ретрузия"
+    group: condylography
+    role: diagnostic
+    settle_sec: 0
+    carryover_min: 0
+    modes: [dynamic]
+    modality: condylography
+    requires_excursion: true
+    aliases: ["протрузия/ретрузия", "protrusion/retrusion"]
+  - code: CDG_MEDIOTRUSION_LEFT
+    label_ru: "Медиотрузия влево"
+    group: condylography
+    role: diagnostic
+    settle_sec: 0
+    carryover_min: 0
+    modes: [dynamic]
+    modality: condylography
+    requires_excursion: true
+    aliases: ["медиотрузия влево", "mediotrusion left"]
+  - code: CDG_MEDIOTRUSION_RIGHT
+    label_ru: "Медиотрузия вправо"
+    group: condylography
+    role: diagnostic
+    settle_sec: 0
+    carryover_min: 0
+    modes: [dynamic]
+    modality: condylography
+    requires_excursion: true
+    aliases: ["медиотрузия вправо", "mediotrusion right"]

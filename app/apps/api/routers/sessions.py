@@ -384,3 +384,42 @@ async def confirm_shortlist(
     await audit(db, principal, "session.shortlist_confirmed", "session", str(session.id),
                 payload={"codes": payload.confirmed_probe_codes})
     return {"status": session.status, "confirmed": payload.confirmed_probe_codes}
+
+
+@router.get("/{session_id}/measurements")
+async def measurements(
+    session_id: UUID, db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(current_principal),
+) -> dict:
+    """Канонические значения по пробам — для модальностей, которые не сводятся
+    к отклику от нейтрали (кондилография, динамика). Р-36."""
+    session = await load_session(db, session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "сессия не найдена")
+    bundle = bundle_from_session(session)
+    out = []
+    for trial in sorted(session.trials, key=lambda t: (t.pass_no, t.ordinal)):
+        spec = bundle.probes.get(trial.probe_code)
+        params = []
+        flags: list[str] = []
+        for m in trial.measurements:
+            flags.extend(m.quality_flags or [])
+            for code, value in sorted((m.params or {}).items()):
+                p = bundle.registry.get(code)
+                params.append({
+                    "code": code, "value": value,
+                    "label_ru": p.label_ru if p else code,
+                    "unit": p.unit if p else "",
+                    "domain": p.domain if p else "unknown",
+                    "modality": p.modality if p else m.modality,
+                    "direction": p.direction if p else "unknown",
+                    "in_index": bool(p and p.in_pi),
+                })
+        out.append({
+            "trial_id": str(trial.id), "probe_code": trial.probe_code,
+            "label_ru": spec.label_ru if spec else trial.probe_code,
+            "modality": spec.modality if spec else "unknown",
+            "pass_no": trial.pass_no, "quality_flags": sorted(set(flags)), "params": params,
+        })
+    return {"session_id": str(session.id), "started_at": session.started_at.isoformat(),
+            "device": (session.platform_config_baseline or {}).get("device"), "trials": out}

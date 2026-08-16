@@ -1,0 +1,38 @@
+CADIAX Numerical Analysis
+Name: Протрузия/ретрузия
+Type: Симметричный
+Date: 30 Ноябрь 2023 г.
+System: CADIAX® 4
+
+QUANTITY Right Left
+Maximum excursion distance 11,98 mm 11,78 mm
+at time position 1,953 sec 2,025 sec
+
+REPRODUCIBILITY Right Left
+3 mm 0,09 0,04
+5 mm 0,08 0,09
+10 mm 0,07 0,16
+
+RETRAL STABILITY Right Left
+Initial — mm — mm
+Final 0,02 mm 0,01 mm
+
+SCI ANGLES Right Left
+3 mm 69,09° 61,56°
+5 mm 64,36° 58,51°
+10 mm 52,46° 43,21°
+
+TCI ANGLES Right Left
+3 mm 15,66° −9,53°
+5 mm 10,75° −7,85°
+10 mm 9,45° −7,53°
+
+START/END DIFFERENCE Right Left
+Distance 0,02 mm 0,08 mm
+
+SPEED PHENOMENA Right Left
+Maximum speed −91,11 mm/sec −85,56 mm/sec
+at time position 2,358 sec 2,331 sec
+
+STRAIGHTNESS Right Left
+Kobs coefficient 0,13 0,15

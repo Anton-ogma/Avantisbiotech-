@@ -36,3 +36,88 @@ def test_unrecognized_is_not_silently_skipped():
     """MUST §5.1: молчаливый пропуск запрещён."""
     with pytest.raises(ParserNotFound):
         detect_parser(b"Foo;Bar\n1;2\n")
+
+
+# ── Реальные протоколы приборов клиники (§5.2 MUST: файл на каждый парсер) ────
+
+def test_formetric_dynamic4d_protocol():
+    """DIERS formetric 4D, Parameter_F4_Dynamic4D, условие «лев окк», 3 км/ч."""
+    parser, results = parse_blob((FIXTURES / "formetric_dynamic4d_protocol.txt").read_bytes())
+    assert parser.format_id == "formetric-pdf-protocol-v1"
+    r = results[0]
+    assert r.raw_row["condition_label"] == "лев окк"
+    assert r.raw_row["date"] == "04.03.2025"
+    assert r.params["GAIT_SPEED_KMH"] == 3.0
+    assert r.params["DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX"] == 38.0
+    assert r.params["DYN_SAGITTAL_IMBALANCE_VP_DM"] == 5.0      # градусы, не мм
+
+
+def test_side_word_becomes_canonical_sign():
+    """Прибор печатает модуль и сторону словом; канон — вправо положительно (§5.3)."""
+    _, results = parse_blob((FIXTURES / "formetric_dynamic4d_protocol.txt").read_bytes())
+    p = results[0].params
+    assert p["DYN_PELVIC_OBLIQUITY"] == 17.0                    # «17 мм Прав.» → +17
+    assert p["DYN_PELVIC_ROTATION_ROM_MIN"] == -1.0             # «1° Лев.»     → −1
+
+
+def test_range_bounds_are_sorted_not_taken_in_print_order():
+    """Ловушка настоящего протокола: «20 мм Прав. - 6 мм Прав.» — границы идут
+    в порядке фазы цикла. Наивное «первое = минимум» даёт размах −14."""
+    from importers.formetric_pdf import parse_range
+
+    assert parse_range("20 мм Прав. - 6 мм Прав.") == (6.0, 20.0)
+    assert parse_range("1° Лев. - 7° Прав.") == (-1.0, 7.0)
+
+    _, results = parse_blob((FIXTURES / "formetric_dynamic4d_protocol.txt").read_bytes())
+    p = results[0].params
+    assert p["DYN_PELVIC_OBLIQUITY_ROM"] == 14.0               # 20 − 6, а не 6 − 20
+    assert p["DYN_PELVIC_ROTATION_ROM"] == 8.0                 # +7 − (−1)
+    assert all(v >= 0 for k, v in p.items() if k.endswith("_ROM"))
+
+
+def test_cadiax_open_close():
+    """CADIAX 4, числовой анализ, движение «Открывание/закрывание»."""
+    parser, results = parse_blob((FIXTURES / "cadiax_open_close.txt").read_bytes())
+    assert parser.format_id == "cadiax-numeric-v4"
+    r = results[0]
+    assert r.raw_row["movement_code"] == "CDG_OPEN_CLOSE"
+    assert r.params["CDG_MAX_EXCURSION_R"] == 22.45
+    assert r.params["CDG_MAX_EXCURSION_L"] == 20.82
+    assert r.params["CDG_SCI_10MM_R"] == 51.93
+    assert r.params["CDG_TCI_3MM_L"] == -6.42                   # минус U+2212
+    assert r.params["CDG_QUANTITY_SYMMETRY"] == 107.85
+    assert r.params["CDG_MAX_ROTATION_GAMMA"] == 29.90
+
+
+def test_cadiax_flags_uneven_reproducibility():
+    """Собственная метрология прибора: 0,46 справа против 0,03 слева — признак
+    неравного качества записи, а не биологической асимметрии."""
+    _, results = parse_blob((FIXTURES / "cadiax_open_close.txt").read_bytes())
+    assert "reproducibility_side_mismatch:3mm" in results[0].quality_flags
+
+    _, clean = parse_blob((FIXTURES / "cadiax_protrusion_retrusion.txt").read_bytes())
+    assert not any(f.startswith("reproducibility") for f in clean[0].quality_flags)
+
+
+def test_clinic_label_resolves_to_probe_code(bundle):
+    """Метка условия из протокола разрешается реестром, а не догадкой парсера."""
+    assert bundle.probes.by_alias("лев окк").code == "MAND_OCCLUSION_LEFT"
+    assert bundle.probes.by_alias("открывание/закрывание").code == "CDG_OPEN_CLOSE"
+    assert bundle.probes.by_alias("неизвестное условие") is None
+
+
+def test_occlusion_is_not_equated_with_laterotrusion(bundle):
+    """Р-36: «лев окк» и латеротрузия влево — РАЗНЫЕ коды. Отождествить их
+    значило бы предрешить результат исследования."""
+    assert bundle.probes.get("MAND_OCCLUSION_LEFT") is not None
+    assert bundle.probes.get("MAND_LAT_LEFT") is not None
+    assert bundle.probes.by_alias("лев окк").code != "MAND_LAT_LEFT"
+
+
+def test_excursion_cross_check_blocks_link_on_mismatch():
+    """§6.2: расхождение экскурсии выше допуска — связка по коду пробы не строится."""
+    from domain.effects import match_excursion
+
+    assert match_excursion(22.0, 22.45).status == "matched"
+    assert match_excursion(18.0, 22.45).status == "mismatch"
+    assert match_excursion(None, 22.45).status == "absent"

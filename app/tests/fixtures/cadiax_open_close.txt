@@ -1,0 +1,57 @@
+CADIAX Numerical Analysis
+Name: Открывание/закрывание
+Type: Симметричный
+Date: 30 Ноябрь 2023 г.
+System: CADIAX® 4
+
+QUANTITY Right Left
+Maximum excursion distance 22,45 mm 20,82 mm
+at time position 2,700 sec 2,565 sec
+
+REPRODUCIBILITY Right Left
+3 mm 0,46 0,03
+5 mm 0,46 0,05
+10 mm 0,29 0,13
+
+RETRAL STABILITY Right Left
+Initial — mm — mm
+Final 0,04 mm 0,04 mm
+
+SCI ANGLES Right Left
+3 mm 67,10° 59,76°
+5 mm 63,03° 57,48°
+10 mm 51,93° 41,07°
+
+TCI ANGLES Right Left
+3 mm 6,82° −6,42°
+5 mm 5,54° −6,15°
+10 mm 7,01° −5,53°
+
+START/END DIFFERENCE Right Left
+Distance 0,22 mm 0,15 mm
+
+SPEED PHENOMENA Right Left
+Maximum speed 73,33 mm/sec 58,89 mm/sec
+at time position 1,845 sec 1,899 sec
+
+STRAIGHTNESS Right Left
+Kobs coefficient 0,23 0,18
+
+HARMONY OF TRANS. AND ROT. Right Left
+Value 51,23°/mm 54,15°/mm
+
+QUANTITY SYMMETRY Right/Left
+Ratio 107,85%
+
+ANGULATION SYMMETRY SCI Right/Left
+Ratio at 3 mm 112,29%
+Ratio at 5 mm 109,64%
+Ratio at 10 mm 126,45%
+
+SIMULTANEOUS MOVEMENT Hinge axis
+Angle 2,67°
+at time position 3,294 sec
+
+QUANTITY OF ROTATION Gamma
+Maximum rotation angle 29,90°
+at time position 2,448 sec

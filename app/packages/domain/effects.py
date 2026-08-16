@@ -202,3 +202,57 @@ def interim_repeat_codes(responses: list[ProbeResponse], threshold: float, top: 
         key=lambda r: -abs(r.delta_index or 0.0),
     )
     return [r.probe_code for r in ranked[:top]]
+
+
+# ── Связка кондилографии и формометрии: уровень M синхронизации (§6.2) ───────
+
+@dataclass(frozen=True, slots=True)
+class ExcursionMatch:
+    status: Literal["matched", "mismatch", "absent"]
+    formetric_mm: float | None
+    condylar_mm: float | None
+    delta_mm: float | None
+    tolerance_mm: float
+    message: str
+
+
+def match_excursion(
+    formetric_mm: float | None,
+    condylar_mm: float | None,
+    tolerance_mm: float = 1.0,
+) -> ExcursionMatch:
+    """MUST §6.2: сверка excursion_mm записи аксиографии и формометрической пробы.
+
+    При превышении допуска связка НЕ строится, `match_status = mismatch` и флаг
+    выводится в отчёт: расхождение означает, что пациент выполнил разные движения
+    под двумя приборами, и сопоставлять их как одно условие нельзя.
+
+    Источник условной величины — QUANTITY / Maximum excursion distance CADIAX;
+    для парных сторон берётся большая, как и печатает прибор.
+    """
+    if formetric_mm is None or condylar_mm is None:
+        return ExcursionMatch(
+            "absent", formetric_mm, condylar_mm, None, tolerance_mm,
+            "экскурсия задана не для обеих модальностей — связка не строится",
+        )
+    delta = round(condylar_mm - formetric_mm, 3)
+    if abs(delta) <= tolerance_mm:
+        return ExcursionMatch("matched", formetric_mm, condylar_mm, delta, tolerance_mm,
+                              "экскурсии совпадают в пределах допуска")
+    return ExcursionMatch(
+        "mismatch", formetric_mm, condylar_mm, delta, tolerance_mm,
+        f"расхождение экскурсии {abs(delta):.2f} мм превышает допуск {tolerance_mm} мм: "
+        "движения под приборами различались, связка по коду пробы не строится",
+    )
+
+
+def condylar_asymmetry(params: dict[str, float], metric: str) -> float | None:
+    """Асимметрия сустава — «суставной» знак когерентности §9.5.
+
+    Возвращает относительную разницу право/лево в процентах. Прибор печатает
+    готовые Ratio, но собственный расчёт нужен для метрик, где их нет.
+    """
+    r, l = params.get(f"{metric}_R"), params.get(f"{metric}_L")
+    if r is None or l is None or (abs(r) + abs(l)) == 0:
+        return None
+    return round(200 * (r - l) / (abs(r) + abs(l)), 2)

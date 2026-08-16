@@ -117,6 +117,11 @@ class ProbeSpec:
     requires_effort: bool = False
     requires_excursion: bool = False
     shams_group: str | None = None
+    modality: str = "formetric"
+    #: Метки условия, как их пишет клиника в протоколе прибора («лев окк»).
+    #: Сопоставление живёт здесь, а не в парсере: догадываться в разборе, что
+    #: значит сокращение оператора, нельзя (Р-36).
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +131,15 @@ class ProbeRegistry:
 
     def get(self, code: str) -> ProbeSpec | None:
         return self.probes.get(code)
+
+    def by_alias(self, label: str) -> ProbeSpec | None:
+        """Разрешение метки протокола в код пробы. None — метка неизвестна,
+        и это повод спросить, а не угадать."""
+        needle = " ".join(label.lower().split())
+        for spec in self.probes.values():
+            if needle in {a.lower() for a in spec.aliases} or needle == spec.code.lower():
+                return spec
+        return None
 
     def shams_for(self, group: str) -> list[ProbeSpec]:
         return [p for p in self.probes.values() if p.shams_group == group]
@@ -226,6 +240,8 @@ def load_probe_registry(version: str) -> ProbeRegistry:
             requires_effort=bool(p.get("requires_effort", False)),
             requires_excursion=bool(p.get("requires_excursion", False)),
             shams_group=p.get("shams_group"),
+            modality=p.get("modality", "formetric"),
+            aliases=tuple(p.get("aliases") or ()),
         )
         for p in (raw.get("probes") or [])
     }

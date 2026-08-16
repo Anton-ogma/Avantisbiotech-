@@ -10,7 +10,14 @@ let actor = { ref: "clinician-1", role: "clinician" as Role };
 export const setActor = (ref: string, role: Role) => { actor = { ref, role }; };
 export const getActor = () => actor;
 
+/** Статический снимок для автономного просмотра: страница, опубликованная без
+ *  бэкенда, читает данные отсюда. Контур замкнут — внешних запросов нет (Р-23). */
+const snapshot = (): Record<string, unknown> | null =>
+  (globalThis as any).__DIERS_SNAPSHOT__ ?? null;
+
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const snap = snapshot();
+  if (snap && path in snap) return snap[path] as T;
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
@@ -105,4 +112,17 @@ export const api = {
     ),
   protocolAnalytics: () => call<any>("/research/protocol-analytics"),
   progress: () => call<any>("/research/progress"),
+  measurements: (id: string) => call<Measurements>(`/sessions/${id}/measurements`),
 };
+
+export interface MeasuredParam {
+  code: string; value: number; label_ru: string; unit: string;
+  domain: string; modality: string; direction: Direction; in_index: boolean;
+}
+export interface MeasuredTrial {
+  trial_id: string; probe_code: string; label_ru: string; modality: string;
+  pass_no: number; quality_flags: string[]; params: MeasuredParam[];
+}
+export interface Measurements {
+  session_id: string; started_at: string; device: string | null; trials: MeasuredTrial[];
+}
