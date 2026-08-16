@@ -76,6 +76,11 @@ MUST:
 Если хост-приложение написано на другом языке, весь домен выносится отдельным Python-сервисом
 с контрактом §13; смешивать домен между языками запрещено.
 
+Р-10: хост — `fitmed-ecosystem` (TypeScript/Express), поэтому действует именно этот вариант.
+Модуль реализуется отдельным Python-сервисом со своей БД и разворачивается самостоятельно;
+хост обращается к нему только по §13. Существующий TS-модуль DIERS в fitmed целевым
+не становится и в кодовую базу модуля не переносится.
+
 ```
 apps/  web · api · worker-signal · worker-report · bridge-agent
 packages/
@@ -105,9 +110,11 @@ sessions(
   id uuid pk, patient_ref text fk, protocol_version text,
   started_at timestamptz, operator_ref text,
   study_mode boolean default false,
+  neutral_definition text not null,          -- копия значения на момент сессии (Р-8)
   lld_mm numeric,                            -- разница длины ног
   platform_config_baseline jsonb,            -- компенсация, действующая на всю сессию
   norms_version text, thresholds_version text, rules_version text,
+  profile_version text, registry_version text,   -- Р-3: веса и границы категорий; param_registry
   status text not null,                      -- единственное поле состояния, домен = машина §8.1:
                                              -- prepared | baseline_recorded | probes_running |
                                              -- imported | quality_reviewed | shortlist_confirmed |
@@ -167,8 +174,12 @@ leg_axis_measurements(id uuid pk, session_id uuid fk, side text,
 
 analyses(id uuid pk, session_id uuid fk,
   norms_version text, thresholds_version text, rules_version text,
-  input_hash text not null,                  -- детерминизм
+  profile_version text, registry_version text,
+  input_hash text not null,                  -- детерминизм, sha256 по пяти версиям (Р-3)
   result jsonb, created_at timestamptz);
+-- Р-2: строки analyses неизменяемы и не удаляются; переанализ создаёт новую строку.
+-- Версии в analyses — то, с чем считали; версии в sessions — то, что действовало
+-- в момент обследования. Сопоставимость визитов (§12) сверяется по analyses.
 
 reports(id uuid pk, analysis_id uuid fk, status text, variant text,
   pdf_ref text, signed_by text, signed_at timestamptz);
@@ -182,10 +193,15 @@ audit_log(id bigserial pk, actor text, action text, entity text, entity_id uuid,
 
 Инварианты (MUST, проверяются тестами):
 1. `raw_imports.file_hash` уникален — повторная загрузка не создаёт второе обследование.
-2. `analyses.input_hash = sha256(канонические данные + три версии конфигурации)`;
-   одинаковый вход даёт побайтово одинаковый `result`.
+2. `analyses.input_hash = sha256(канонические данные + пять версий конфигурации:
+   norms, thresholds, rules, profile, registry)`; одинаковый вход даёт побайтово
+   одинаковый `result` (Р-3).
 3. Версии конфигурации в `analyses` и `sessions` — **копии значений**, не ссылки на «текущее».
 4. `audit_log` — только вставка; UPDATE и DELETE запрещены правами БД.
+5. `analyses` — только вставка; переанализ порождает новую строку, прежние сохраняются.
+   Подписанный отчёт остаётся привязан к своей строке `analyses` навсегда (Р-2).
+6. `sessions.neutral_definition` — копия значения `patients_ref` на момент создания
+   сессии; последующая смена у пациента прошлые сессии не переписывает (Р-8).
 
 ---
 
@@ -267,6 +283,12 @@ MUST: модуль `canonical/sign_conventions` — единственное м�
 `param_registry` — реестр параметров: код, модальность, единица, домен, направление
 (`two_sided` | `higher_worse` | `lower_worse`), участие в PI.
 
+MUST: реестр версионируется (`registry_version`), входит в `input_hash` и в проверку
+сопоставимости §12 — изменение домена, направления или участия параметра в PI меняет
+результат при тех же измерениях (Р-3). Реестр проб (§10) версионируется отдельно,
+через уже существующее `sessions.protocol_version`, и в `input_hash` не входит:
+на арифметику анализа он не влияет.
+
 Обязательный минимум формометрии: дисбаланс туловища VP-DM, сагиттальный дисбаланс,
 боковое отклонение rms и max, ротация позвонков rms и max, поверхностная ротация rms,
 угол кифоза ICT-ITL, угол лордоза ITL-ILS, перекос таза DL-DR, торсия таза, ротация таза,
@@ -318,9 +340,19 @@ prepared → baseline_recorded → probes_running → imported → quality_revie
 
 ### 8.3 Подтверждающий повтор
 
-После полного прохода топ-2 условия по |ΔPI| измеряются повторно, вперемешку с нейтралью.
-Условие попадает в шорт-лист только если повтор подтверждает знак и величина не выходит
-за порог. Неподтверждённые условия в рекомендации не идут.
+Формируются два раздельных списка (Р-5):
+
+- **`shortlist`** — кандидаты в терапию. Только пробы с достоверным **улучшением**
+  (`ΔPI < −thresholds.PI`), ранжируются по величине улучшения. После полного прохода
+  топ-2 из них измеряются повторно, вперемешку с нейтралью. Проба остаётся в шорт-листе,
+  только если повтор подтверждает знак и величина не выходит за порог.
+  Неподтверждённые пробы в рекомендации не идут.
+- **`notable_worsening`** — пробы с достоверным **ухудшением** (`ΔPI > +thresholds.PI`).
+  Диагностически значимы и печатаются в отчёте, включая режим тренера (§14.5, блок
+  конфликтов), но в рекомендации не попадают никогда и подтверждающим повтором
+  не проверяются — помечаются `unconfirmed`.
+
+Пробы внутри полосы шума не попадают ни в один список (§9.3).
 
 ---
 
@@ -386,9 +418,12 @@ occlusal_load:     (MAND_CLENCH, MAND_OPEN)
 | `full` | три домена сходятся, поза достоверна |
 | `partial` | два из трёх |
 | `posture_only` | поза достоверна, остальные в шуме |
-| `conflict` | поза улучшается, мышечная активность растёт выше порога |
+| `posture_muscle_conflict` | поза улучшается, мышечная активность растёт выше порога |
 
 MUST: `ΔMI` считается отдельным индексом и **не суммируется** в PI.
+
+Значение переименовано из `conflict` (Р-6): слово занято вердиктом комбинированной
+пробы §9.7, а в отчёте оба поля стоят рядом.
 
 ### 9.6 Карта отклика
 
@@ -400,13 +435,25 @@ MUST: `ΔMI` считается отдельным индексом и **не с
 
 ```
 add   = ΔPI(A) + ΔPI(B)
-best  = min(ΔPI(A), ΔPI(B))
-verdict = additive   если |ΔPI(AB) − add|  < thresholds.PI
-        = dominant   если |ΔPI(AB) − best| < thresholds.PI
-        = conflict   если ΔPI(AB) > best + thresholds.PI
+best  = min(ΔPI(A), ΔPI(B))          # ΔPI < 0 — улучшение, поэтому лучший = минимальный
+
+verdict — первое совпавшее условие в этом порядке (Р-4):
+  conflict      если ΔPI(AB) > best + thresholds.PI      # хуже лучшего одиночного
+  synergistic   если ΔPI(AB) < add  − thresholds.PI      # лучше суммы одиночных
+  dominant      если |ΔPI(AB) − best| < thresholds.PI    # работает один уровень
+  additive      если |ΔPI(AB) − add|  < thresholds.PI    # вклады складываются
+  indeterminate иначе
 ```
 
+MUST: порядок проверки нормативен — условия пересекаются, первое совпадение выигрывает.
+`conflict` проверяется первым: комбинация, которая хуже лучшего одиночного уровня, остаётся
+конфликтом, даже если численно совпала с суммой. `dominant` проверяется раньше `additive`:
+когда вклад одного уровня в пределах шума, клинически честная формулировка — «работает
+один уровень», а не «вклады сложились».
+
 MUST: при `conflict` движок правил не выдаёт одновременное назначение обоих уровней.
+При `indeterminate` комбинация не интерпретируется и в рекомендации не идёт — требуется
+повтор пробы.
 
 ### 9.8 ЭМГ
 
@@ -425,6 +472,11 @@ MUST: перед интерпретацией эпохи считается SNR;
 
 MUST: myoline (изометрическая сила) не участвует в анализе проб; используется только для
 дозирования программы.
+
+Р-12: термин закрепляется за изометрической силой; ЭМГ — отдельная модальность с
+собственными таблицами (§4). Данные унаследованной таблицы `myoline_studies` в
+`fitmed-ecosystem` хранят амплитуды в мкВ, то есть по существу являются ЭМГ и при
+любой миграции трактуются как ЭМГ, а не как myoline.
 
 ---
 
@@ -448,7 +500,28 @@ values: {TRUNK_IMBALANCE_VP_DM: null, PI: null, EMG_RMS_PCT: null}
 ```
 
 ```yaml
-# probes/probe_registry.yaml
+# profiles/profile_<version>.yaml   — профиль клиники (Р-3)
+version: "2026.1"
+z_cap: 4
+z_categories: {normal: 1.0, borderline: 2.0, deviation: 3.0}
+domain_weights: {frontal: null, pelvis: null, rotation: null, sagittal: null, support: null}
+param_weights: {TRUNK_IMBALANCE_VP_DM: null}
+```
+
+```yaml
+# registry/param_registry_<version>.yaml   — реестр параметров (Р-3)
+version: "2026.1"
+params:
+  TRUNK_IMBALANCE_VP_DM:
+    modality: formetric
+    unit: mm
+    domain: frontal
+    direction: two_sided        # two_sided | higher_worse | lower_worse
+    in_pi: true
+```
+
+```yaml
+# probes/probe_registry.yaml        — версионируется через sessions.protocol_version
 - code: MAND_SPLINT_THERAPEUTIC
   group: mandibular
   role: therapeutic
@@ -507,11 +580,24 @@ MUST: решение принимает движок правил. LLM прим�
 ## 12. История и сопоставимость визитов
 
 MUST: два обследования сопоставимы, только если совпадают
-`neutral_definition`, `norms_version`, `thresholds_version`, тип опорной позиции
-кондилографии и тип аппарата.
+`neutral_definition`, `norms_version`, `thresholds_version`, `profile_version`,
+`registry_version`, тип опорной позиции кондилографии и тип аппарата.
+
+`rules_version` в проверку **не входит** (Р-3): правила влияют на рекомендации,
+а не на измеренные величины, и их обновление сопоставимость визитов не разрывает.
+
+MUST: сверка идёт по строкам `analyses`, а не по `sessions` (Р-2). Версии в `sessions` —
+то, что действовало в момент обследования; версии в `analyses` — то, с чем фактически
+посчитали. Переанализ старых сессий под общий набор версий (§13) — штатный способ
+восстановить сопоставимость после обновления норм или порогов.
+
+`GET /patients/{ref}/history` по умолчанию подбирает **самый свежий набор версий,
+доступный для всех сессий пациента**, и на нём строит динамику; набор можно задать явно
+параметрами запроса. Выбранный набор печатается рядом с графиком.
 
 При несовпадении визиты показываются рядом, но разности **не вычисляются**; интерфейс
-выводит причину. Это правило распространяется на все межвизитные величины.
+выводит причину и предлагает переанализ, если сырые данные позволяют. Это правило
+распространяется на все межвизитные величины.
 
 Раздельно отслеживаются и никогда не смешиваются:
 - `PI(нейтраль)` по визитам — динамика исходного состояния;
@@ -524,20 +610,40 @@ MUST: два обследования сопоставимы, только ес�
 ## 13. API
 
 ```
-POST   /sessions                          {patient_ref} -> session
+POST   /sessions                          {patient_ref} -> session            (status = prepared)
 POST   /sessions/{id}/trials              {probe_code, role, mode, platform_config, excursion_mm, effort}
 POST   /sessions/{id}/imports             multipart | {source: agent}
 GET    /sessions/{id}/imports             очередь разбора со статусами
 POST   /sessions/{id}/validate            -> список нарушений протокола
-POST   /sessions/{id}/analyze             -> analysis_id
+POST   /sessions/{id}/quality-review      {decisions[]} -> status = quality_reviewed      (Р-7)
+POST   /sessions/{id}/shortlist           {confirmed_probe_codes[]} -> shortlist_confirmed (Р-7)
+POST   /sessions/{id}/analyze             {versions?} -> analysis_id, status = analyzed
 GET    /analyses/{id}                     -> AnalysisResult
 GET    /analyses/{id}/report?variant=     doctor|patient|dentist|coach
+POST   /analyses/{id}/report              {variant} -> reports.id, session.status = reported (Р-7)
 POST   /analyses/{id}/sign                {clinician_ref}
-GET    /patients/{ref}/history            визиты + признак сопоставимости
+GET    /patients/{ref}/history            визиты + признак сопоставимости; ?versions=
+POST   /patients/{ref}/reanalyze          {versions, session_ids?} -> job_id              (Р-2)
 POST   /outcomes                          план против факта
 ```
 
+Переходы состояния сессии (§8.1) делятся на два типа (Р-7):
+
+- **неявные**, по факту появления данных: `prepared → baseline_recorded` (первая
+  импортированная проба-нейтраль), `→ probes_running` (первая не-базовая проба),
+  `→ imported` (очередь разбора пуста и нераспознанных файлов нет);
+- **явные**, требующие решения человека: `quality-review`, `shortlist`, `analyze`,
+  `report` — каждый отдельным вызовом, каждый пишется в `audit_log`.
+
+`POST /sessions/{id}/analyze` без `versions` берёт активный набор конфигурации;
+с явным набором — считает по нему. Повторный вызов создаёт новую строку `analyses`,
+прежние не трогает (§4, инвариант 5).
+
 MUST: `patient_ref` — внешний идентификатор; персональные данные внутрь модуля не попадают.
+MUST (Р-9): `patient_ref` непроизводен от ПДн и неперечислим — UUIDv4 либо HMAC от
+идентификатора хоста с ключом, хранящимся у хоста. Последовательные идентификаторы
+хост-системы в этой роли запрещены. Таблицу соответствия `patient_ref ↔ учётная запись`
+ведёт хост; модуль её не хранит и за identity к хосту не обращается.
 
 ---
 
@@ -606,10 +712,16 @@ MUST:
 
 MUST:
 - данные особой категории по GDPR: правовое основание и DPIA оформляются до пилота;
-- ПДн не хранятся в модуле, только `patient_ref`;
+- ПДн не хранятся в модуле, только `patient_ref` (требования к нему — §13, Р-9);
 - аудит-лог фиксирует открытие, изменение, подпись, экспорт;
 - экспорт когорты обезличен, ключ соответствия хранится вне модуля;
 - развёртывание on-prem поддерживается как основной сценарий.
+
+MUST (Р-11): пациент не является субъектом записи в модуль. Данные вводит `operator`,
+выводы подписывает `clinician`. Пациент получает результат только пациентским вариантом
+подписанного отчёта (§13, `variant=patient`) и не имеет ни записи, ни удаления —
+удаление противоречит аудиту (§15) и воспроизводимости (§4). Роль `coach` — чтение
+своего варианта отчёта, без доступа к сырым величинам (§14.5).
 
 ---
 
