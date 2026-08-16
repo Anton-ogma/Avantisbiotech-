@@ -104,3 +104,101 @@ async def crossmodal(
             "улучшение позы» к «назначить» делает врач (Р-19)."
         ),
     }
+
+
+@router.get("/{session_id}/compare")
+async def compare_probes(
+    session_id: UUID, probes: str = "", db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(current_principal),
+) -> dict:
+    """Обзор «от сустава до стоп» (§14.3) для произвольного набора проб.
+
+    Одна таблица: строки — параметры, сгруппированные по областям тела сверху
+    вниз; столбцы — выбранные пробы. Все модальности рядом, а не по отдельным
+    экранам: разнести их значило бы сделать сопоставление ручной работой врача.
+
+    MUST §14.2 п. 2: шкала единая по всей панели. §14.2 п. 8: структурные
+    величины (ось ног, сила) выводятся без Δ.
+    """
+    from domain.config import load_anatomy
+    from domain.effects import param_effect
+
+    session = await load_session(db, session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "сессия не найдена")
+    bundle = bundle_from_session(session)
+    anatomy = load_anatomy()
+
+    by_probe: dict[str, dict[str, float]] = {}
+    baseline: dict[str, float] = {}
+    for trial in sorted(session.trials, key=lambda t: (t.pass_no, t.ordinal)):
+        values: dict[str, float] = {}
+        for m in trial.measurements:
+            if not m.excluded:
+                values.update({k: float(v) for k, v in (m.params or {}).items()})
+        if not values:
+            continue
+        spec = bundle.probes.get(trial.probe_code)
+        if spec and spec.is_neutral and trial.pass_no == 1:
+            baseline.update(values)
+        by_probe.setdefault(trial.probe_code, {}).update(values)
+
+    wanted = [c for c in (probes.split(",") if probes else []) if c in by_probe]
+    if not wanted:
+        wanted = [c for c in by_probe if not (bundle.probes.get(c) and bundle.probes.get(c).is_neutral)][:3]
+
+    columns = []
+    for code in wanted:
+        spec = bundle.probes.get(code)
+        columns.append({"code": code, "label_ru": spec.label_ru if spec else code,
+                        "modality": spec.modality if spec else "unknown"})
+
+    regions = []
+    for region in anatomy.ordered():
+        rows = []
+        codes = {c for probe in wanted for c in by_probe[probe]
+                 if (r := anatomy.region_of(c)) and r.key == region.key}
+        for code in sorted(codes):
+            spec = bundle.registry.get(code)
+            cells: dict[str, dict] = {}
+            for probe in wanted:
+                value = by_probe[probe].get(code)
+                if value is None:
+                    continue
+                base = baseline.get(code)
+                if base is None or region.structural:
+                    # §14.2 п. 8: структурная величина выводится без Δ,
+                    # и без нейтрали отсчитывать тоже не от чего.
+                    cells[probe] = {"value": round(value, 3), "delta": None,
+                                    "effect_size": None, "confidence": "undefined",
+                                    "interpretation": None}
+                    continue
+                e = param_effect(code, base, value, bundle)
+                cells[probe] = {"value": round(value, 3), "delta": e.delta,
+                                "effect_size": e.effect_size, "confidence": e.confidence,
+                                "interpretation": e.interpretation}
+            if cells:
+                rows.append({
+                    "code": code,
+                    "label_ru": spec.label_ru if spec else code,
+                    "unit": spec.unit if spec else "",
+                    "modality": spec.modality if spec else "unknown",
+                    "direction": spec.direction if spec else "unknown",
+                    "baseline": None if baseline.get(code) is None else round(baseline[code], 3),
+                    "sdc": bundle.thresholds.sdc(code),
+                    "cells": cells,
+                })
+        if rows:
+            regions.append({
+                "key": region.key, "label_ru": region.label_ru, "hint": region.hint,
+                "order": region.order, "structural": region.structural, "rows": rows,
+            })
+
+    return {
+        "session_id": str(session.id),
+        "columns": columns,
+        "regions": regions,
+        "has_baseline": bool(baseline),
+        "note": "Порядок областей задан §14.3 и воспроизводит логику осмотра, "
+                "а не удобство вёрстки.",
+    }

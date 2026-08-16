@@ -1,0 +1,90 @@
+# Анатомическая раскладка «от сустава до стоп» (§14.3 ТЗ).
+#
+# ВАЖНО: это конфигурация ОТОБРАЖЕНИЯ, и она НЕ входит в input_hash и НЕ имеет
+# собственной версии в наборе из пяти (Р-3). Причина: группировка параметров по
+# областям тела не меняет ни одного вычисляемого значения — ни z, ни RI, ни
+# эффект. Включить её в хэш значило бы объявлять переанализ всех сессий каждый
+# раз, когда кто-то переименовал заголовок раздела.
+#
+# Порядок строк сверху вниз задан §14.3 и менять его произвольно нельзя:
+# он воспроизводит логику осмотра, а не удобство вёрстки.
+version: "2026.1"
+regions:
+  - key: tmj
+    order: 1
+    label_ru: "ВНЧС и мыщелки"
+    hint: "суставной сигнал §9.5, в постуральный индекс не суммируется"
+    prefixes: ["CDG_"]
+  - key: masticatory
+    order: 2
+    label_ru: "Жевательные мышцы"
+    hint: "панель ВНЧС: жевательная и височная"
+    codes: ["EMG_RMS_MASSETER_L", "EMG_RMS_MASSETER_R", "EMG_ASYM_MASSETER",
+            "EMG_RMS_TEMPORALIS_L", "EMG_RMS_TEMPORALIS_R", "EMG_ASYM_TEMPORALIS"]
+  - key: neck
+    order: 3
+    label_ru: "Шея"
+    codes: ["EMG_RMS_SCM_L", "EMG_RMS_SCM_R", "EMG_ASYM_SCM",
+            "EMG_RMS_TRAPEZIUS_L", "EMG_RMS_TRAPEZIUS_R", "EMG_ASYM_TRAPEZIUS"]
+  - key: spine_frontal
+    order: 4
+    label_ru: "Позвоночник · фронталь"
+    hint: "боковое отклонение, ротация, дисбаланс туловища"
+    codes: ["TRUNK_IMBALANCE_VP_DM", "LATERAL_DEVIATION_RMS", "LATERAL_DEVIATION_MAX",
+            "VERTEBRAL_ROTATION_RMS", "VERTEBRAL_ROTATION_MAX", "SURFACE_ROTATION_RMS"]
+  - key: spine_sagittal
+    order: 5
+    label_ru: "Позвоночник · сагитталь"
+    hint: "кифоз, лордоз, наклон туловища"
+    codes: ["SAGITTAL_IMBALANCE_VP_DM", "KYPHOTIC_ANGLE_ICT_ITL", "LORDOTIC_ANGLE_ITL_ILS",
+            "TRUNK_INCLINATION",
+            "DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX", "DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM",
+            "DYN_LORDOTIC_ANGLE_ITL_ILS_MAX", "DYN_LORDOTIC_ANGLE_ITL_ILS_ROM",
+            "DYN_SAGITTAL_IMBALANCE_VP_DM", "DYN_SAGITTAL_IMBALANCE_VP_DM_ROM",
+            "DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM_MIN", "DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM_MAX",
+            "DYN_LORDOTIC_ANGLE_ITL_ILS_ROM_MIN", "DYN_LORDOTIC_ANGLE_ITL_ILS_ROM_MAX",
+            "DYN_SAGITTAL_IMBALANCE_VP_DM_ROM_MIN", "DYN_SAGITTAL_IMBALANCE_VP_DM_ROM_MAX"]
+    muscles: ["EMG_RMS_ERECTOR_SPINAE_L", "EMG_RMS_ERECTOR_SPINAE_R", "EMG_ASYM_ERECTOR_SPINAE"]
+  - key: pelvis
+    order: 6
+    label_ru: "Таз"
+    hint: "перекос, торсия, ротация, наклон"
+    codes: ["PELVIC_OBLIQUITY_DL_DR", "PELVIC_TORSION", "PELVIC_ROTATION", "PELVIC_TILT",
+            "DYN_PELVIC_OBLIQUITY", "DYN_PELVIC_OBLIQUITY_ROM",
+            "DYN_PELVIC_ROTATION", "DYN_PELVIC_ROTATION_ROM",
+            "DYN_PELVIC_OBLIQUITY_ROM_MIN", "DYN_PELVIC_OBLIQUITY_ROM_MAX",
+            "DYN_PELVIC_ROTATION_ROM_MIN", "DYN_PELVIC_ROTATION_ROM_MAX"]
+    muscles: ["EMG_RMS_QUADRATUS_LUMBORUM_L", "EMG_RMS_QUADRATUS_LUMBORUM_R",
+              "EMG_ASYM_QUADRATUS_LUMBORUM",
+              "EMG_RMS_GLUTEUS_MAXIMUS_L", "EMG_RMS_GLUTEUS_MAXIMUS_R",
+              "EMG_ASYM_GLUTEUS_MAXIMUS"]
+  - key: leg_axis
+    order: 7
+    label_ru: "Ось ног"
+    hint: "структурная величина: выводится без Δ (§14.2 п. 8)"
+    codes: ["LEG_AXIS_VARUS_VALGUS_L", "LEG_AXIS_VARUS_VALGUS_R"]
+    muscles: ["EMG_RMS_RECTUS_FEMORIS_L", "EMG_RMS_RECTUS_FEMORIS_R", "EMG_ASYM_RECTUS_FEMORIS"]
+    structural: true
+  - key: shank
+    order: 8
+    label_ru: "Голени"
+    codes: []
+    muscles: ["EMG_RMS_TIBIALIS_ANTERIOR_L", "EMG_RMS_TIBIALIS_ANTERIOR_R",
+              "EMG_ASYM_TIBIALIS_ANTERIOR",
+              "EMG_RMS_GASTROCNEMIUS_L", "EMG_RMS_GASTROCNEMIUS_R", "EMG_ASYM_GASTROCNEMIUS"]
+  - key: feet
+    order: 9
+    label_ru: "Стопы"
+    hint: "опора: доли нагрузки и центр давления"
+    codes: ["LOAD_SHARE_LEFT", "LOAD_SHARE_RIGHT", "COP_PATH_LENGTH", "COP_AREA"]
+  - key: strength
+    order: 10
+    label_ru: "Изометрическая сила"
+    hint: "сессионное измерение: в анализе проб не участвует (§9.8 MUST)"
+    prefixes: ["MYO_FORCE_"]
+    structural: true
+  - key: condition
+    order: 11
+    label_ru: "Условия пробы"
+    hint: "не измерения, а параметры проведения"
+    codes: ["GAIT_SPEED_KMH"]

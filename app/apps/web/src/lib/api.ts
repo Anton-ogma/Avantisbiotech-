@@ -114,6 +114,10 @@ export const api = {
   progress: () => call<any>("/research/progress"),
   measurements: (id: string) => call<Measurements>(`/sessions/${id}/measurements`),
   crossmodal: (id: string) => call<CrossModal>(`/sessions/${id}/crossmodal`),
+  /** Порядок проб канонизируется сортировкой: иначе один и тот же набор даёт
+   *  разные адреса, и автономный снимок промахивается мимо своего же ключа. */
+  compare: (id: string, probes: string[]) =>
+    call<CompareOut>(`/sessions/${id}/compare?probes=${[...probes].sort().join(",")}`),
   autoIngest: async (id: string, files: File[]) => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));
@@ -147,6 +151,26 @@ export interface CrossModal {
   note?: string;
   warning?: string;
 }
+export interface CompareCell {
+  value: number; delta: number | null; effect_size: number | null;
+  confidence: Confidence; interpretation: "improving" | "worsening" | null;
+}
+export interface CompareRow {
+  code: string; label_ru: string; unit: string; modality: string; direction: Direction;
+  baseline: number | null; sdc: number | null; cells: Record<string, CompareCell>;
+}
+export interface RegionOut {
+  key: string; label_ru: string; hint: string; order: number;
+  structural: boolean; rows: CompareRow[];
+}
+export interface CompareOut {
+  session_id: string;
+  columns: { code: string; label_ru: string; modality: string }[];
+  regions: RegionOut[];
+  has_baseline: boolean;
+  note: string;
+}
+
 export interface IngestFile {
   filename: string; status: string; modality: string | null; format_id: string | null;
   condition_label: string | null; probe_code: string | null; params: number; reason: string | null;

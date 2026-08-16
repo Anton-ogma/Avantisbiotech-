@@ -289,3 +289,58 @@ def load_bundle(
         probes=load_probe_registry(protocol_version),
         rules_version=rules_version,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class Region:
+    """Область тела для обзора «от сустава до стоп» (§14.3)."""
+
+    key: str
+    order: int
+    label_ru: str
+    hint: str
+    codes: tuple[str, ...]
+    muscles: tuple[str, ...]
+    prefixes: tuple[str, ...]
+    structural: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Anatomy:
+    version: str
+    regions: tuple[Region, ...]
+
+    def region_of(self, code: str) -> Region | None:
+        for r in self.regions:
+            if code in r.codes or code in r.muscles:
+                return r
+        for r in self.regions:
+            if any(code.startswith(p) for p in r.prefixes):
+                return r
+        return None
+
+    def ordered(self) -> list[Region]:
+        return sorted(self.regions, key=lambda r: r.order)
+
+
+@lru_cache(maxsize=4)
+def load_anatomy(version: str = "2026.1") -> Anatomy:
+    """Конфигурация ОТОБРАЖЕНИЯ: в input_hash не входит (§14.3, Р-39).
+
+    Группировка по областям тела не меняет ни одного вычисляемого значения.
+    Включить её в хэш значило бы объявлять переанализ всех сессий при
+    переименовании заголовка раздела.
+    """
+    raw = _read(CONFIG_ROOT / "regions" / "anatomy.yaml")
+    regions = tuple(
+        Region(
+            key=r["key"], order=int(r.get("order", 99)), label_ru=r.get("label_ru", r["key"]),
+            hint=r.get("hint", ""), codes=tuple(r.get("codes") or ()),
+            muscles=tuple(r.get("muscles") or ()), prefixes=tuple(r.get("prefixes") or ()),
+            structural=bool(r.get("structural", False)),
+        )
+        for r in (raw.get("regions") or [])
+    )
+    if not regions:
+        raise ConfigError("анатомическая раскладка пуста")
+    return Anatomy(version=str(raw.get("version", version)), regions=regions)

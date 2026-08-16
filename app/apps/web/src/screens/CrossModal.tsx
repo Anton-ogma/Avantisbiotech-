@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { api, type CrossModal as CM, type Measurements, type SessionOut } from "../lib/api";
+import { api, type CompareOut, type CrossModal as CM, type Measurements, type SessionOut } from "../lib/api";
+import { BodyMap, RegionBars } from "../components/BodyMap";
 import { CondylarProfile, EmgMirror, SignalTriad, type Channel, type CondylarMetric } from "../components/Modality";
 import { DeltaChart } from "../components/DeltaChart";
-import { Banner, Card, Empty, Segmented, Tile } from "../components/ui";
+import { Banner, Card, DeltaBadge, Empty, Segmented, Tile } from "../components/ui";
 
 const VERDICT_TONE: Record<string, string> = {
   best: "good", worse: "bad", conflicting: "bad",
@@ -16,6 +17,10 @@ const BUCKET_TITLE: Record<string, string> = {
   neutral: "В пределах шума",
   no_posture: "Поза не измерена",
 };
+/** Палитра серий: цвет кодирует ПРОБУ, направление уходит в подпись — §14.2 п. 3
+ *  для случая нескольких наложенных объектов. */
+const PALETTE = ["var(--accent)", "var(--accent-2)", "#e08a3c", "#39a06b", "#c2569a"];
+
 const MUSCLE_RU: Record<string, string> = {
   MASSETER: "жеват.", TEMPORALIS: "височ.", SCM: "ГКС", TRAPEZIUS: "трапец.",
   ERECTOR_SPINAE: "выпрям.", QUADRATUS_LUMBORUM: "кв.пояс.", GLUTEUS_MAXIMUS: "ягод.",
@@ -27,6 +32,10 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
   const [data, setData] = useState<CM | null>(null);
   const [raw, setRaw] = useState<Measurements | null>(null);
   const [probe, setProbe] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [compare, setCompare] = useState<CompareOut | null>(null);
+  const [region, setRegion] = useState("");
+  const [view, setView] = useState<"single" | "table">("single");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { if (!selected && sessions.length) setSelected(sessions[0].id); }, [sessions, selected]);
@@ -34,9 +43,29 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
     if (!selected) return;
     setData(null); setError(null);
     Promise.all([api.crossmodal(selected), api.measurements(selected)])
-      .then(([c, m]) => { setData(c); setRaw(m); setProbe(c.probes[0]?.probe_code ?? ""); })
+      .then(([c, m]) => {
+        setData(c); setRaw(m);
+        setProbe(c.probes[0]?.probe_code ?? "");
+        // По умолчанию сравниваем лучшую и худшую: именно этот контраст
+        // читают в первую очередь.
+        const best = c.ranking.best?.[0];
+        const worse = c.ranking.worse?.[0];
+        const initial = [best, worse].filter(Boolean) as string[];
+        setPicked(initial.length ? initial : c.probes.slice(0, 2).map((p) => p.probe_code));
+      })
       .catch((e) => setError(e.message));
   }, [selected]);
+
+  useEffect(() => {
+    if (!selected || picked.length === 0) { setCompare(null); return; }
+    api.compare(selected, picked)
+      .then((c) => { setCompare(c); if (!c.regions.some((r) => r.key === region))
+        setRegion(c.regions[0]?.key ?? ""); })
+      .catch((e) => setError(e.message));
+  }, [selected, picked]);
+
+  const toggle = (code: string) =>
+    setPicked((prev) => prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]);
 
   const current = data?.probes.find((p) => p.probe_code === probe);
   const trial = raw?.trials.find((t) => t.probe_code === probe);
@@ -121,7 +150,135 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
               ))}
           </div>
 
-          <div className="section-title">Проба</div>
+          <div className="row" style={{ marginTop: 26, marginBottom: 12 }}>
+            <div className="section-title" style={{ margin: 0 }}>Проба</div>
+            <span className="spacer" />
+            <Segmented value={view} onChange={setView} options={[
+              { value: "single", label: "Одна проба" },
+              { value: "table", label: "Сравнить несколько" },
+            ]} />
+          </div>
+
+          {view === "table" ? (
+            <>
+              <Card>
+                <div className="tile-label" style={{ marginBottom: 10 }}>
+                  Пробы в сравнении · выбрано {picked.length}
+                </div>
+                <div className="row">
+                  {data.probes.map((p) => {
+                    const on = picked.includes(p.probe_code);
+                    return (
+                      <button key={p.probe_code} className="pill" aria-pressed={on}
+                              onClick={() => toggle(p.probe_code)}>
+                        {on ? "− " : "+ "}{p.probe_code.replace(/^(MAND|PODAL|CTRL|CDG)_/, "")}
+                      </button>
+                    );
+                  })}
+                </div>
+                {picked.length === 0 && (
+                  <p className="tile-hint">Добавьте пробы, чтобы построить таблицу.</p>
+                )}
+                {compare && !compare.has_baseline && (
+                  <p className="tile-hint">
+                    Нейтрали в сессии нет: показаны абсолютные значения без Δ.
+                  </p>
+                )}
+              </Card>
+
+              {compare && compare.regions.length > 0 && (
+                <>
+                  <div className="section-title">От сустава до стоп</div>
+                  <div className="grid cols-2">
+                    <Card>
+                      <div className="chart-scroll">
+                        <BodyMap regions={compare.regions} active={region} onPick={setRegion} />
+                      </div>
+                      <p className="tile-hint">
+                        Насыщенность кодирует величину отклика, а не направление: для
+                        большинства параметров оно не установлено, и красить область
+                        в «хорошо/плохо» было бы враньём.
+                      </p>
+                    </Card>
+                    <Card>
+                      <div className="tile-label" style={{ marginBottom: 8 }}>Область</div>
+                      <div className="row">
+                        {compare.regions.map((r) => (
+                          <button key={r.key} className="pill" aria-pressed={r.key === region}
+                                  onClick={() => setRegion(r.key)}>
+                            {r.label_ru}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="row" style={{ marginTop: 14 }}>
+                        {compare.columns.map((c, i) => (
+                          <span key={c.code} className="badge" style={{
+                            borderColor: PALETTE[i % PALETTE.length],
+                            color: PALETTE[i % PALETTE.length],
+                          }}>
+                            {c.label_ru}
+                          </span>
+                        ))}
+                      </div>
+                    </Card>
+                  </div>
+
+                  {compare.regions.filter((r) => r.key === region).map((r) => (
+                    <div key={r.key}>
+                      <div className="section-title">{r.label_ru}</div>
+                      <Card>
+                        {r.hint && <p className="tile-hint" style={{ marginTop: 0 }}>{r.hint}</p>}
+                        <div className="chart-scroll">
+                          <RegionBars region={r} columns={compare.columns} palette={PALETTE} />
+                        </div>
+                        <div className="table-wrap" style={{ marginTop: 16 }}>
+                          <table>
+                            <thead>
+                              <tr>
+                                <th>Параметр</th>
+                                <th className="num">Нейтраль</th>
+                                {compare.columns.map((c) => (
+                                  <th key={c.code} className="num">
+                                    {c.code.replace(/^(MAND|PODAL|CTRL|CDG)_/, "")}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {r.rows.map((row) => (
+                                <tr key={row.code}>
+                                  <td>
+                                    {row.label_ru}
+                                    <div className="mono">{row.code} · {row.unit}</div>
+                                  </td>
+                                  <td className="num">{row.baseline ?? "—"}</td>
+                                  {compare.columns.map((c) => {
+                                    const cell = row.cells[c.code];
+                                    if (!cell) return <td key={c.code} className="num muted">—</td>;
+                                    if (cell.delta === null) {
+                                      return <td key={c.code} className="num">{cell.value}</td>;
+                                    }
+                                    return (
+                                      <td key={c.code} className="num">
+                                        <DeltaBadge delta={cell.delta} confidence={cell.confidence}
+                                                    interpretation={cell.interpretation}
+                                                    direction={row.direction} />
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </Card>
+                    </div>
+                  ))}
+                </>
+              )}
+            </>
+          ) : (
+          <>
           <Card>
             <Segmented value={probe}
                        options={data.probes.map((p) => ({
@@ -201,6 +358,9 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                 </>
               )}
             </>
+          )}
+
+          </>
           )}
 
           {data.session_level?.myoline && Object.keys(data.session_level.myoline).length > 0 && (

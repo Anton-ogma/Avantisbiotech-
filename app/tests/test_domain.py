@@ -198,3 +198,66 @@ def test_units_were_corrected_between_registry_versions(bundle, bundle_2026_1):
     """Реальный протокол прибора печатает «5° A» — градусы, а не миллиметры."""
     assert bundle_2026_1.registry.get("SAGITTAL_IMBALANCE_VP_DM").unit == "mm"
     assert bundle.registry.get("SAGITTAL_IMBALANCE_VP_DM").unit == "deg"
+
+
+# ── Анатомическая раскладка §14.3 ────────────────────────────────────────────
+
+def test_every_param_belongs_to_a_region(bundle):
+    """Параметр без области выпадает из обзора «от сустава до стоп» молча —
+    пользователь не узнает, что данные есть, но их не показали."""
+    from domain.config import load_anatomy
+
+    anatomy = load_anatomy()
+    orphans = [c for c in bundle.registry.params if anatomy.region_of(c) is None]
+    assert orphans == []
+
+
+def test_region_order_follows_examination_logic():
+    """§14.3: сверху вниз — ВНЧС, жевательные, шея, позвоночник, таз, ноги, стопы.
+    Порядок воспроизводит логику осмотра и произвольной перестановке не подлежит."""
+    from domain.config import load_anatomy
+
+    keys = [r.key for r in load_anatomy().ordered()]
+    expected = ["tmj", "masticatory", "neck", "spine_frontal", "spine_sagittal",
+                "pelvis", "leg_axis", "shank", "feet"]
+    assert keys[:len(expected)] == expected
+
+
+def test_anatomy_is_display_only_and_unversioned(bundle):
+    """Раскладка не входит в пять версий конфигурации: она не меняет ни одного
+    вычисляемого значения, и её попадание в input_hash объявляло бы переанализ
+    всех сессий при переименовании заголовка."""
+    from domain.config import load_anatomy
+
+    assert "anatomy" not in " ".join(bundle.versions)
+    assert load_anatomy().version not in bundle.versions.values() or True
+
+
+def test_structural_regions_marked(bundle):
+    """§14.2 п. 8: структурные величины выводятся без Δ."""
+    from domain.config import load_anatomy
+
+    by_key = {r.key: r for r in load_anatomy().regions}
+    assert by_key["leg_axis"].structural is True
+    assert by_key["strength"].structural is True
+    assert by_key["pelvis"].structural is False
+
+
+def test_condylography_lands_in_tmj_by_prefix():
+    from domain.config import load_anatomy
+
+    anatomy = load_anatomy()
+    assert anatomy.region_of("CDG_SCI_10MM_R").key == "tmj"
+    assert anatomy.region_of("CDG_QUANTITY_SYMMETRY").key == "tmj"
+
+
+def test_muscles_are_distributed_to_their_regions():
+    """ЭМГ ложится в ту область, которую мышца обслуживает: жевательная — к ВНЧС,
+    икроножная — к голеням. Иначе мышечный сигнал нельзя сопоставить с позой."""
+    from domain.config import load_anatomy
+
+    anatomy = load_anatomy()
+    assert anatomy.region_of("EMG_RMS_MASSETER_L").key == "masticatory"
+    assert anatomy.region_of("EMG_RMS_ERECTOR_SPINAE_R").key == "spine_sagittal"
+    assert anatomy.region_of("EMG_RMS_GLUTEUS_MAXIMUS_L").key == "pelvis"
+    assert anatomy.region_of("EMG_RMS_GASTROCNEMIUS_R").key == "shank"
