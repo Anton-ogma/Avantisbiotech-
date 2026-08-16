@@ -108,8 +108,14 @@ sessions(
   lld_mm numeric,                            -- разница длины ног
   platform_config_baseline jsonb,            -- компенсация, действующая на всю сессию
   norms_version text, thresholds_version text, rules_version text,
-  status text                                -- draft|ready|analyzed|reported
+  status text not null,                      -- единственное поле состояния, домен = машина §8.1:
+                                             -- prepared | baseline_recorded | probes_running |
+                                             -- imported | quality_reviewed | shortlist_confirmed |
+                                             -- analyzed | reported
+  low_confidence boolean default false       -- дрейф нейтрали выше порога (§8.2); ортогонален status
 );
+-- Решение Р-1: состояние сессии хранится в одном поле; прежний домен
+-- draft|ready|analyzed|reported упразднён. См. decisions.md.
 
 trials(
   id uuid pk, session_id uuid fk, probe_code text, ordinal int,
@@ -281,8 +287,14 @@ Pedoscan: доли нагрузки лево/право, передний/зад
 ### 8.1 Машина состояний
 
 ```
-prepared → baseline_recorded → probes_running → imported → quality_reviewed → shortlist_confirmed → analyzed
+prepared → baseline_recorded → probes_running → imported → quality_reviewed → shortlist_confirmed → analyzed → reported
 ```
+
+Это единственное состояние сессии, хранится в `sessions.status` (решение Р-1).
+Переходы односторонние, каждый пишется в `audit_log`. Признак `low_confidence` (§8.2)
+ортогонален состоянию и хранится отдельным полем, значением статуса не является.
+Статусы отчёта (`draft`/`signed`, §1) живут в `reports.status` и с состоянием сессии
+не пересекаются.
 
 Валидаторы (MUST, блокируют переход):
 
