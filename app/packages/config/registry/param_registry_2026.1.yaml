@@ -1,0 +1,170 @@
+# Реестр параметров (§7 ТЗ). Версионируется: registry_version входит в input_hash
+# и в проверку сопоставимости §12 (Р-3).
+#
+# direction: two_sided | higher_worse | lower_worse | unknown
+#   unknown — значение ПО УМОЛЧАНИЮ для нового параметра (Р-18). Такой параметр
+#   входит в RI по модулю, красится нейтрально, в правила не попадает.
+#   Смена на определённое направление требует ссылки на подтверждающий анализ.
+version: "2026.1"
+params:
+  TRUNK_IMBALANCE_VP_DM:
+    label_ru: "Дисбаланс туловища VP-DM"
+    modality: formetric
+    unit: mm
+    domain: frontal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  SAGITTAL_IMBALANCE_VP_DM:
+    label_ru: "Сагиттальный дисбаланс VP-DM"
+    modality: formetric
+    unit: mm
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  LATERAL_DEVIATION_RMS:
+    label_ru: "Боковое отклонение, rms"
+    modality: formetric
+    unit: mm
+    domain: frontal
+    direction: higher_worse
+    in_pi: true
+    weight: 1.0
+    direction_evidence: "assumed_clinical, подтверждение не проводилось"
+  LATERAL_DEVIATION_MAX:
+    label_ru: "Боковое отклонение, max"
+    modality: formetric
+    unit: mm
+    domain: frontal
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  VERTEBRAL_ROTATION_RMS:
+    label_ru: "Ротация позвонков, rms"
+    modality: formetric
+    unit: deg
+    domain: rotation
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  VERTEBRAL_ROTATION_MAX:
+    label_ru: "Ротация позвонков, max"
+    modality: formetric
+    unit: deg
+    domain: rotation
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  SURFACE_ROTATION_RMS:
+    label_ru: "Поверхностная ротация, rms"
+    modality: formetric
+    unit: deg
+    domain: rotation
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  KYPHOTIC_ANGLE_ICT_ITL:
+    label_ru: "Угол кифоза ICT-ITL"
+    modality: formetric
+    unit: deg
+    domain: sagittal
+    direction: two_sided
+    in_pi: true
+    weight: 1.0
+  LORDOTIC_ANGLE_ITL_ILS:
+    label_ru: "Угол лордоза ITL-ILS"
+    modality: formetric
+    unit: deg
+    domain: sagittal
+    direction: two_sided
+    in_pi: true
+    weight: 1.0
+  PELVIC_OBLIQUITY_DL_DR:
+    label_ru: "Перекос таза DL-DR"
+    modality: formetric
+    unit: mm
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  PELVIC_TORSION:
+    label_ru: "Торсия таза"
+    modality: formetric
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  PELVIC_ROTATION:
+    label_ru: "Ротация таза"
+    modality: formetric
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  PELVIC_TILT:
+    label_ru: "Наклон таза"
+    modality: formetric
+    unit: deg
+    domain: pelvis
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  TRUNK_INCLINATION:
+    label_ru: "Наклон туловища"
+    modality: formetric
+    unit: deg
+    domain: sagittal
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  LOAD_SHARE_LEFT:
+    label_ru: "Доля нагрузки, лево"
+    modality: pedoscan
+    unit: pct
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  LOAD_SHARE_RIGHT:
+    label_ru: "Доля нагрузки, право"
+    modality: pedoscan
+    unit: pct
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  COP_PATH_LENGTH:
+    label_ru: "Длина пути ЦД"
+    modality: pedoscan
+    unit: mm
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 1.0
+  COP_AREA:
+    label_ru: "Площадь ЦД"
+    modality: pedoscan
+    unit: mm2
+    domain: support
+    direction: unknown
+    in_pi: true
+    weight: 0.5
+  LEG_AXIS_VARUS_VALGUS_L:
+    label_ru: "Ось ноги, варус/вальгус, лево"
+    modality: leg_axis
+    unit: deg
+    domain: leg_axis
+    direction: unknown
+    in_pi: false          # структурный домен, в PI и RI не входит (§9.2)
+    weight: 0.0
+  LEG_AXIS_VARUS_VALGUS_R:
+    label_ru: "Ось ноги, варус/вальгус, право"
+    modality: leg_axis
+    unit: deg
+    domain: leg_axis
+    direction: unknown
+    in_pi: false
+    weight: 0.0

@@ -1,0 +1,143 @@
+# Реестр проб. Версионируется через sessions.protocol_version, в input_hash не входит:
+# на арифметику по собранным каноническим данным не влияет (Р-3).
+#
+# settle_sec и carryover_min — НАЗНАЧЕННЫЕ значения, подлежащие эмпирической
+# калибровке по собственным данным (слой 2 аналитики, §9.8а, Этап 2).
+version: "2026.1"
+probes:
+  - code: MAND_NEUTRAL_NO_APPARATUS
+    label_ru: "Нейтраль без аппарата"
+    group: reference
+    role: reference
+    settle_sec: 120
+    carryover_min: 0
+    modes: [static]
+    is_neutral: true
+  - code: MAND_NEUTRAL_WITH_APPARATUS
+    label_ru: "Нейтраль с аппаратом"
+    group: reference
+    role: reference
+    settle_sec: 120
+    carryover_min: 0
+    modes: [static]
+    is_neutral: true
+  - code: MAND_CLENCH
+    label_ru: "Сжатие зубов"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 60
+    carryover_min: 3
+    modes: [static]
+    requires_effort: true
+  - code: MAND_PROTRUSION
+    label_ru: "Протрузия"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 90
+    carryover_min: 3
+    modes: [static]
+    requires_excursion: true
+  - code: MAND_RETRUSION
+    label_ru: "Ретрузия"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 90
+    carryover_min: 3
+    modes: [static]
+    requires_excursion: true
+  - code: MAND_LAT_LEFT
+    label_ru: "Латеротрузия влево"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 90
+    carryover_min: 3
+    modes: [static]
+    requires_excursion: true
+  - code: MAND_LAT_RIGHT
+    label_ru: "Латеротрузия вправо"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 90
+    carryover_min: 3
+    modes: [static]
+    requires_excursion: true
+  - code: MAND_OPEN
+    label_ru: "Открывание"
+    group: mandibular
+    role: diagnostic
+    settle_sec: 60
+    carryover_min: 3
+    modes: [static]
+    requires_excursion: true
+  - code: CTRL_TASK_NONORAL
+    label_ru: "Контроль: внеротовая задача"
+    group: mandibular
+    role: control
+    settle_sec: 60
+    carryover_min: 3
+    modes: [static]
+  - code: CTRL_TONGUE
+    label_ru: "Контроль: положение языка"
+    group: mandibular
+    role: control
+    settle_sec: 60
+    carryover_min: 3
+    modes: [static]
+  - code: CTRL_SHAM_MANDIBULAR
+    label_ru: "Sham: аппарат без терапевтического позиционирования"
+    group: mandibular
+    role: control
+    settle_sec: 300
+    carryover_min: 15
+    modes: [static]
+    shams_group: mandibular
+  - code: CTRL_SHAM_PODAL
+    label_ru: "Sham: клин нулевой толщины"
+    group: podal
+    role: control
+    settle_sec: 120
+    carryover_min: 5
+    modes: [static]
+    shams_group: podal
+  - code: PODAL_WEDGE_L
+    label_ru: "Клин слева"
+    group: podal
+    role: podal
+    settle_sec: 120
+    carryover_min: 5
+    modes: [static]
+  - code: PODAL_WEDGE_R
+    label_ru: "Клин справа"
+    group: podal
+    role: podal
+    settle_sec: 120
+    carryover_min: 5
+    modes: [static]
+  - code: PODAL_HEEL_LIFT
+    label_ru: "Подъём пятки"
+    group: podal
+    role: podal
+    settle_sec: 120
+    carryover_min: 5
+    modes: [static]
+  - code: PODAL_BAREFOOT_REF
+    label_ru: "Босиком, опорная"
+    group: podal
+    role: reference
+    settle_sec: 120
+    carryover_min: 0
+    modes: [static]
+  - code: MAND_SPLINT_THERAPEUTIC
+    label_ru: "Терапевтическая шина"
+    group: mandibular
+    role: therapeutic
+    settle_sec: 300
+    carryover_min: 15
+    modes: [static, dynamic]
+  - code: MAND_SPLINT_JOINT
+    label_ru: "Суставная шина"
+    group: mandibular
+    role: therapeutic
+    settle_sec: 300
+    carryover_min: 15
+    modes: [static, dynamic]

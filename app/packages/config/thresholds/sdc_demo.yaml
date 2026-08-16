@@ -1,0 +1,29 @@
+# ПОРОГИ. source содержит маркер demo → интерфейс обязан показывать предупреждение
+# о некалиброванных порогах на всех экранах анализа и в отчёте (§10 ТЗ).
+#
+# Продуктовые значения приходят из режима повторяемости (Этап 1.5, Р-20):
+# собственный test-retest → ICC, SEM, SDC → sdc_<version>.yaml с
+# source: own_repeatability. Значения ниже НЕ ЯВЛЯЮТСЯ клинически обоснованными.
+version: "demo"
+source: "demo — некалиброванные значения, только для запуска и тестов"
+values:
+  TRUNK_IMBALANCE_VP_DM: 4.0
+  SAGITTAL_IMBALANCE_VP_DM: 5.0
+  LATERAL_DEVIATION_RMS: 1.8
+  LATERAL_DEVIATION_MAX: 3.0
+  VERTEBRAL_ROTATION_RMS: 1.5
+  VERTEBRAL_ROTATION_MAX: 3.0
+  SURFACE_ROTATION_RMS: 1.5
+  KYPHOTIC_ANGLE_ICT_ITL: 3.5
+  LORDOTIC_ANGLE_ITL_ILS: 4.0
+  PELVIC_OBLIQUITY_DL_DR: 3.0
+  PELVIC_TORSION: 2.5
+  PELVIC_ROTATION: 2.5
+  PELVIC_TILT: 2.5
+  TRUNK_INCLINATION: 1.5
+  LOAD_SHARE_LEFT: 3.0
+  LOAD_SHARE_RIGHT: 3.0
+  COP_PATH_LENGTH: 60.0
+  COP_AREA: 40.0
+  PI: 2.0
+  drift: 1.0

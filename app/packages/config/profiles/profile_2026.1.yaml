@@ -1,0 +1,16 @@
+# Профиль клиники (Р-3): веса доменов, ограничитель, границы категорий z.
+# profile_version входит в input_hash и в сопоставимость §12.
+version: "2026.1"
+z_cap: 4.0
+ri_cap: 4.0
+z_categories:
+  normal: 1.0
+  borderline: 2.0
+  deviation: 3.0
+domain_weights:
+  frontal: 1.0
+  sagittal: 1.0
+  rotation: 0.8
+  pelvis: 1.0
+  support: 0.8
+  leg_axis: 0.0     # структурный домен, в индексы не входит (§9.2)
