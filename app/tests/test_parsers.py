@@ -161,3 +161,57 @@ def test_channel_resolution_needs_muscle_and_side():
     assert resolve_channel("жев слева") == ("MASSETER", "L")
     assert resolve_channel("Masseter") is None          # без стороны — не канал
     assert resolve_channel("Lateral Deviation rms") is None
+
+
+def test_figure_classification_by_geometry():
+    """Р-40: растры протокола делятся по геометрии, а не по догадке о смысле.
+
+    Числа взяты из настоящего протокола: реконструкция спины 615×196, схема
+    таза 188×187, напечатанное значение «Перекос таза: 9° R» 756×84, узкое
+    «1° L» 140×66, логотип 60×59.
+
+    Порядок проверок в классификаторе существенен: подпись «1° L» ниже порога
+    стороны, и проверь мы сначала размер — она ушла бы в оформление и потерялась
+    вместе с единственным местом, где напечатан угловой перекос.
+    """
+    from importers.formetric_pdf import classify_figure
+
+    assert classify_figure(615, 196) == "render"
+    assert classify_figure(188, 187) == "render"
+    assert classify_figure(756, 84) == "caption"
+    assert classify_figure(140, 66) == "caption"
+    assert classify_figure(60, 59) == "decor"
+
+
+def test_text_protocol_has_no_figures():
+    """Текстовый слой без PDF-обёртки иллюстраций не несёт — и не выдумывает."""
+    _, results = parse_blob((FIXTURES / "formetric_dynamic4d_protocol.txt").read_bytes())
+    assert results[0].figures == []
+    assert "figure_values_not_in_text_layer" not in results[0].quality_flags
+
+
+def test_pelvic_obliquity_mm_and_deg_are_different_params(bundle):
+    """Р-40: «Перекос таза» протокол печатает дважды — 17 мм в таблице и 9° на
+    схеме. Это разные измеряемые величины, и слить их в один код нельзя.
+
+    Проверка защищает от «упрощения»: кто-нибудь однажды решит, что два кода с
+    одинаковой русской подписью — дубликат, и сведёт их. После этого 17 и 9
+    окажутся значениями одной величины, а её динамика — бессмыслицей.
+    """
+    linear = bundle.registry.get("DYN_PELVIC_OBLIQUITY")
+    angular = bundle.registry.get("DYN_PELVIC_OBLIQUITY_ANGLE")
+    assert linear is not None and angular is not None
+    assert linear.unit == "mm" and angular.unit == "deg"
+    assert linear.domain == angular.domain == "pelvis"
+
+
+def test_parsed_protocol_carries_only_the_linear_obliquity():
+    """Угловой перекос напечатан растром: разбор его НЕ достаёт и не подменяет.
+
+    Если однажды парсер начнёт «выводить» угол из миллиметров, тест упадёт:
+    пересчёт требует ширины таза, которой протокол не печатает.
+    """
+    _, results = parse_blob((FIXTURES / "formetric_dynamic4d_protocol.txt").read_bytes())
+    params = results[0].params
+    assert params["DYN_PELVIC_OBLIQUITY"] == 17.0
+    assert "DYN_PELVIC_OBLIQUITY_ANGLE" not in params

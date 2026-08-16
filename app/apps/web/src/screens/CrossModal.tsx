@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
-import { api, type CompareOut, type CrossModal as CM, type Measurements, type SessionOut } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, type CompareOut, type CrossModal as CM, type FiguresOut, type Measurements,
+         type SessionOut } from "../lib/api";
+import { AnatomyCompare, AnatomySet, type Values } from "../components/Anatomy";
 import { BodyMap, RegionBars } from "../components/BodyMap";
+import { ProtocolFigures } from "../components/ProtocolFigures";
 import { CondylarProfile, EmgMirror, SignalTriad, type Channel, type CondylarMetric } from "../components/Modality";
 import { DeltaChart } from "../components/DeltaChart";
 import { Banner, Card, DeltaBadge, Empty, Segmented, Tile } from "../components/ui";
@@ -34,6 +37,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
   const [probe, setProbe] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [compare, setCompare] = useState<CompareOut | null>(null);
+  const [figures, setFigures] = useState<FiguresOut | null>(null);
   const [region, setRegion] = useState("");
   const [view, setView] = useState<"single" | "table">("single");
   const [error, setError] = useState<string | null>(null);
@@ -57,12 +61,46 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
   }, [selected]);
 
   useEffect(() => {
-    if (!selected || picked.length === 0) { setCompare(null); return; }
-    api.compare(selected, picked)
+    if (!selected) { setCompare(null); return; }
+    api.compare(selected)
       .then((c) => { setCompare(c); if (!c.regions.some((r) => r.key === region))
         setRegion(c.regions[0]?.key ?? ""); })
       .catch((e) => setError(e.message));
-  }, [selected, picked]);
+    // Иллюстрации протокола: их может не быть вовсе (CSV-путь), и это не ошибка.
+    api.figures(selected).then(setFigures).catch(() => setFigures(null));
+  }, [selected]);
+
+  /** Значения по пробам для анатомических схем: одно место сборки на все
+   *  схемы, иначе каждая лезла бы в `measurements` со своим разбором. */
+  const valuesByProbe = useMemo(() => {
+    const out = new Map<string, Values>();
+    for (const trial of raw?.trials ?? []) {
+      const acc = out.get(trial.probe_code) ?? {};
+      for (const p of trial.params) acc[p.code] = p.value;
+      out.set(trial.probe_code, acc);
+    }
+    return out;
+  }, [raw]);
+
+  /** Столбцы и строки фильтруются локально: ограничения на число проб нет. */
+  const shown = useMemo(() => {
+    if (!compare) return null;
+    const columns = compare.columns.filter((c) => picked.includes(c.code));
+    const regions = compare.regions
+      .map((r) => ({
+        ...r,
+        rows: r.rows
+          .map((row) => ({
+            ...row,
+            cells: Object.fromEntries(
+              Object.entries(row.cells).filter(([code]) => picked.includes(code)),
+            ),
+          }))
+          .filter((row) => Object.keys(row.cells).length > 0),
+      }))
+      .filter((r) => r.rows.length > 0);
+    return { ...compare, columns, regions };
+  }, [compare, picked]);
 
   const toggle = (code: string) =>
     setPicked((prev) => prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code]);
@@ -179,20 +217,38 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                 {picked.length === 0 && (
                   <p className="tile-hint">Добавьте пробы, чтобы построить таблицу.</p>
                 )}
-                {compare && !compare.has_baseline && (
+                {shown && !shown.has_baseline && (
                   <p className="tile-hint">
                     Нейтрали в сессии нет: показаны абсолютные значения без Δ.
                   </p>
                 )}
               </Card>
 
-              {compare && compare.regions.length > 0 && (
+              {shown && shown.columns.length > 0 && (
+                <>
+                  <div className="section-title">Схемы по пробам</div>
+                  <Card>
+                    <p className="tile-hint" style={{ marginTop: 0 }}>
+                      Один вид — один ряд, столбцы — пробы. Схемы строятся из
+                      измеренных величин: угол проводится под измеренным углом,
+                      размах движения — веером от границы до границы.
+                    </p>
+                    <AnatomyCompare probes={shown.columns.map((c) => ({
+                      code: c.code,
+                      label: c.code.replace(/^(MAND|PODAL|CTRL|CDG)_/, ""),
+                      values: valuesByProbe.get(c.code) ?? {},
+                    }))} />
+                  </Card>
+                </>
+              )}
+
+              {shown && shown.regions.length > 0 && (
                 <>
                   <div className="section-title">От сустава до стоп</div>
                   <div className="grid cols-2">
                     <Card>
                       <div className="chart-scroll">
-                        <BodyMap regions={compare.regions} active={region} onPick={setRegion} />
+                        <BodyMap regions={shown.regions} active={region} onPick={setRegion} />
                       </div>
                       <p className="tile-hint">
                         Насыщенность кодирует величину отклика, а не направление: для
@@ -203,7 +259,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                     <Card>
                       <div className="tile-label" style={{ marginBottom: 8 }}>Область</div>
                       <div className="row">
-                        {compare.regions.map((r) => (
+                        {shown.regions.map((r) => (
                           <button key={r.key} className="pill" aria-pressed={r.key === region}
                                   onClick={() => setRegion(r.key)}>
                             {r.label_ru}
@@ -211,7 +267,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                         ))}
                       </div>
                       <div className="row" style={{ marginTop: 14 }}>
-                        {compare.columns.map((c, i) => (
+                        {shown.columns.map((c, i) => (
                           <span key={c.code} className="badge" style={{
                             borderColor: PALETTE[i % PALETTE.length],
                             color: PALETTE[i % PALETTE.length],
@@ -223,13 +279,13 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                     </Card>
                   </div>
 
-                  {compare.regions.filter((r) => r.key === region).map((r) => (
+                  {shown.regions.filter((r) => r.key === region).map((r) => (
                     <div key={r.key}>
                       <div className="section-title">{r.label_ru}</div>
                       <Card>
                         {r.hint && <p className="tile-hint" style={{ marginTop: 0 }}>{r.hint}</p>}
                         <div className="chart-scroll">
-                          <RegionBars region={r} columns={compare.columns} palette={PALETTE} />
+                          <RegionBars region={r} columns={shown.columns} palette={PALETTE} />
                         </div>
                         <div className="table-wrap" style={{ marginTop: 16 }}>
                           <table>
@@ -237,7 +293,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                               <tr>
                                 <th>Параметр</th>
                                 <th className="num">Нейтраль</th>
-                                {compare.columns.map((c) => (
+                                {shown.columns.map((c) => (
                                   <th key={c.code} className="num">
                                     {c.code.replace(/^(MAND|PODAL|CTRL|CDG)_/, "")}
                                   </th>
@@ -252,7 +308,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                                     <div className="mono">{row.code} · {row.unit}</div>
                                   </td>
                                   <td className="num">{row.baseline ?? "—"}</td>
-                                  {compare.columns.map((c) => {
+                                  {shown.columns.map((c) => {
                                     const cell = row.cells[c.code];
                                     if (!cell) return <td key={c.code} className="num muted">—</td>;
                                     if (cell.delta === null) {
@@ -310,6 +366,21 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
 
           {current && (
             <>
+              <div className="section-title">Схемы пробы</div>
+              <Card>
+                <AnatomySet values={valuesByProbe.get(current.probe_code) ?? {}} />
+              </Card>
+
+              {figures && figures.figures.some((f) => f.probe_code === current.probe_code) && (
+                <>
+                  <div className="section-title">Иллюстрации протокола прибора</div>
+                  <Card>
+                    <ProtocolFigures figures={figures.figures} probe={current.probe_code} />
+                    <p className="tile-hint">{figures.note}</p>
+                  </Card>
+                </>
+              )}
+
               <div className="section-title">Три сигнала пробы</div>
               <Card>
                 <div className="chart-scroll"><SignalTriad posture={current.posture.delta} joint={current.joint.delta}

@@ -28,6 +28,7 @@ from ..db import get_db
 from ..models import Measurement, RawImport, Session, Trial
 from ..security import Principal, audit, require
 from ..services.bundle import bundle_from_session
+from ..services.figures import store_figures
 from ..services.session_service import load_session, materialize_param_values
 
 router = APIRouter(prefix="/sessions", tags=["ingest"])
@@ -119,6 +120,7 @@ async def auto_ingest(
                     params=result.params, unmapped=result.unmapped,
                     quality_flags=result.quality_flags,
                 ))
+                store_figures(db, record, trial, [result])
                 touched = True
                 outcomes.append(FileOutcome(
                     name, "ingested", parser.modality, parser.format_id,
@@ -147,6 +149,7 @@ async def auto_ingest(
                 trial_id=trial.id, raw_import_id=record.id, modality=result.modality,
                 params=result.params, unmapped=result.unmapped, quality_flags=result.quality_flags,
             ))
+            store_figures(db, record, trial, [result])
             touched = True
             outcomes.append(FileOutcome(
                 name, "ingested", parser.modality, parser.format_id,

@@ -13,12 +13,13 @@ from importers import ParserNotFound, parse_blob
 from ..db import get_db
 from ..models import Measurement, RawImport, Trial
 from ..security import Principal, audit, current_principal, require
+from ..services.figures import store_figures
 from ..services.session_service import load_session, materialize_param_values
 
 router = APIRouter(prefix="/sessions", tags=["imports"])
 
 MAX_BYTES = 32 * 1024 * 1024      # лимит §5, MUST: молчаливого приёма гигабайта нет
-ALLOWED_SUFFIX = (".csv", ".txt", ".xml", ".c3d", ".edf")
+ALLOWED_SUFFIX = (".csv", ".txt", ".xml", ".c3d", ".edf", ".pdf")
 
 
 @router.post("/{session_id}/imports", response_model=ImportOut, status_code=status.HTTP_201_CREATED)
@@ -90,6 +91,7 @@ async def upload(
             trial_id=trial.id, raw_import_id=record.id, modality=res.modality,
             params=res.params, unmapped=res.unmapped, quality_flags=res.quality_flags,
         ))
+    store_figures(db, record, trial, results)
     await db.flush()
 
     session = await load_session(db, session_id)

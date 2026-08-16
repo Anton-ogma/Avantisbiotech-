@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
-import { api, type MeasuredParam, type Measurements, type SessionOut } from "../lib/api";
+import { api, type FiguresOut, type MeasuredParam, type Measurements,
+         type SessionOut } from "../lib/api";
+import { AnatomySet, type Values } from "../components/Anatomy";
+import { ProtocolFigures } from "../components/ProtocolFigures";
 import { Banner, Card, Empty, Segmented, Tile } from "../components/ui";
 
 const FLAG_RU: Record<string, string> = {
@@ -33,6 +36,7 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
   const [data, setData] = useState<Measurements | null>(null);
   const [trial, setTrial] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
+  const [figures, setFigures] = useState<FiguresOut | null>(null);
 
   useEffect(() => {
     if (!selected && sessions.length) setSelected(sessions[0].id);
@@ -45,10 +49,14 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
       setData(d);
       setTrial(d.trials[0]?.trial_id ?? "");
     }).catch((e) => setError(e.message));
+    // Иллюстраций может не быть вовсе — это не ошибка, а свойство формата.
+    api.figures(selected).then(setFigures).catch(() => setFigures(null));
   }, [selected]);
 
   const current = data?.trials.find((t) => t.trial_id === trial);
   const { paired, single } = current ? pairs(current.params) : { paired: [], single: [] };
+  const values: Values = Object.fromEntries((current?.params ?? []).map((p) => [p.code, p.value]));
+  const shownFigures = (figures?.figures ?? []).filter((f) => f.probe_code === current?.probe_code);
 
   return (
     <>
@@ -88,6 +96,25 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
               </div>
             ))}
           </Card>
+
+          {current && (
+            <>
+              <div className="section-title">Схемы по измерениям</div>
+              <Card>
+                <AnatomySet values={values} />
+              </Card>
+            </>
+          )}
+
+          {shownFigures.length > 0 && (
+            <>
+              <div className="section-title">Иллюстрации протокола прибора</div>
+              <Card>
+                <ProtocolFigures figures={shownFigures} />
+                {figures && <p className="tile-hint">{figures.note}</p>}
+              </Card>
+            </>
+          )}
 
           {paired.length > 0 && (
             <>

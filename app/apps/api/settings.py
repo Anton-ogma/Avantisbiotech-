@@ -28,9 +28,9 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 10
 
     # ── Версии конфигурации (пять, входят в input_hash; Р-3) ──────────────────
-    registry_version: str = "2026.1"
-    profile_version: str = "2026.1"
-    thresholds_version: str = "demo"
+    registry_version: str = "2026.4"
+    profile_version: str = "2026.4"
+    thresholds_version: str = "demo-2026.4"
     norms_version: str = "empty"
     protocol_version: str = "2026.1"
     rules_version: str = "none"

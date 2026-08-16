@@ -18,7 +18,15 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .base import ParseResult, register
+from .base import Figure, ParseResult, register
+
+#: Порог «это не оформление, а содержательная картинка». Ниже — логотипы,
+#: линейки, разделители: у реального протокола это 1–60 px по стороне.
+_MIN_SIDE = 80
+#: Напечатанное значение — низкая широкая полоса. Различаем по геометрии:
+#: содержания растра мы не читаем, см. `_figures`.
+_CAPTION_MAX_H = 100
+_CAPTION_MIN_RATIO = 2.0
 
 #: Подпись параметра в протоколе → (код значения, код размаха).
 ROW_MAP: dict[str, tuple[str, str]] = {
@@ -40,6 +48,19 @@ SIDE_SIGN: dict[str, float] = {
 _MEASURE = re.compile(r"(-?\d+(?:[.,]\d+)?)\s*(°|мм|mm)\s*([А-Яа-яA-Z.]+)?")
 _SPEED = re.compile(r"СКОРОСТЬ\s+([\d.,]+)\s*(km/h|км/ч)")
 _HEADER = re.compile(r"Parameter_F4_(\w+)\s*-\s*(\d{2}\.\d{2}\.\d{4})\s*\((\d{2}:\d{2})\)")
+
+
+def classify_figure(width: int, height: int) -> str:
+    """Что за растр — по геометрии, а не по содержанию (см. `Figure.kind`).
+
+    Порядок проверок существенен: подпись «11° Прав.» ниже порога стороны,
+    и проверь мы сначала размер, она попала бы в оформление и потерялась.
+    """
+    if height <= _CAPTION_MAX_H and width >= _CAPTION_MIN_RATIO * height:
+        return "caption"
+    if width < _MIN_SIDE or height < _MIN_SIDE:
+        return "decor"
+    return "render"
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +111,7 @@ class FormetricPdfProtocolParser:
 
     def parse(self, blob: bytes) -> list[ParseResult]:
         text = self._text(blob)
+        figures = self._figures(blob)
         if "Parameter_F4_" not in text:
             raise ValueError("не протокол Parameter_F4_*")
 
@@ -135,6 +157,11 @@ class FormetricPdfProtocolParser:
 
         if not params:
             flags.append("no_canonical_columns")
+        if any(f.kind == "caption" for f in figures):
+            # Значения, напечатанные на иллюстрации растром, в текстовый слой не
+            # попадают. Прибор так печатает угловой перекос таза: в таблице он в
+            # миллиметрах, на схеме — в градусах. Разбором это не достаётся.
+            flags.append("figure_values_not_in_text_layer")
 
         return [ParseResult(
             format_id=self.format_id,
@@ -147,7 +174,45 @@ class FormetricPdfProtocolParser:
                      "date": header.group(2) if header else "",
                      "time": header.group(3) if header else "",
                      "condition_label": self._condition(text)},
+            figures=figures,
         )]
+
+    @staticmethod
+    def _figures(blob: bytes) -> list[Figure]:
+        """Растровые вложения протокола, кроме оформления.
+
+        Классификация — по геометрии (см. `Figure.kind`). Содержания растра мы
+        не распознаём: OCR давал бы значения без прослеживаемости к прибору,
+        а §5 требует, чтобы каждое значение имело источник и знак.
+        """
+        if not blob.startswith(b"%PDF"):
+            return []
+        try:
+            import io
+
+            from pypdf import PdfReader
+        except ImportError:                                # pragma: no cover
+            return []
+        out: list[Figure] = []
+        reader = PdfReader(io.BytesIO(blob))
+        for page in reader.pages:
+            try:
+                images = list(page.images)
+            except Exception:                              # pragma: no cover
+                continue                                   # битое вложение — не повод терять таблицу
+            for im in images:
+                try:
+                    data = im.data
+                    w, h = im.image.width, im.image.height
+                except Exception:                          # pragma: no cover
+                    continue      # без Pillow размеров нет; таблицу это не рушит
+                kind = classify_figure(w, h)
+                if kind == "decor":
+                    continue
+                mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
+                out.append(Figure(name=im.name, mime=mime, width=w, height=h,
+                                  kind=kind, data=data))
+        return out
 
     @staticmethod
     def _condition(text: str) -> str:

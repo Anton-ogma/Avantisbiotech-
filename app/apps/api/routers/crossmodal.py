@@ -143,9 +143,16 @@ async def compare_probes(
             baseline.update(values)
         by_probe.setdefault(trial.probe_code, {}).update(values)
 
+    def is_probe(code: str) -> bool:
+        spec = bundle.probes.get(code)
+        return not (spec and spec.is_neutral)
+
     wanted = [c for c in (probes.split(",") if probes else []) if c in by_probe]
     if not wanted:
-        wanted = [c for c in by_probe if not (bundle.probes.get(c) and bundle.probes.get(c).is_neutral)][:3]
+        # Без явного списка отдаём ВСЕ пробы: клиент фильтрует столбцы локально.
+        # Отдавать «первые три» значило бы прятать данные, о наличии которых
+        # пользователь не узнает.
+        wanted = sorted(c for c in by_probe if is_probe(c))
 
     columns = []
     for code in wanted:

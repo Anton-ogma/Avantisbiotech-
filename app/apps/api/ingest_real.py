@@ -30,6 +30,7 @@ from importers import parse_blob
 from .db import engine, sessionmaker
 from .models import Base, Measurement, PatientRef, RawImport, Session, SessionPlan, Trial
 from .services.bundle import bundle_from_settings
+from .services.figures import store_figures
 from .services.session_service import load_session, materialize_param_values, run_analysis
 from .settings import get_settings
 
@@ -86,8 +87,9 @@ async def ingest() -> None:
         await db.flush()
         fmt.status = "plan_approved"
         db.add(SessionPlan(session_id=fmt.id, probes=[], approved_by="op-clinic"))
-        await _attach(db, fmt, FIXTURES / "formetric_dynamic4d_protocol.txt",
-                      "MAND_OCCLUSION_LEFT", ordinal=0, t=0.0)
+        fmt_trial = await _attach(db, fmt, FIXTURES / "formetric_dynamic4d_protocol.txt",
+                                  "MAND_OCCLUSION_LEFT", ordinal=0, t=0.0)
+        await _transcribe_figure_values(db, fmt, fmt_trial)
         fmt.status = "imported"
         await db.flush()
 
@@ -101,7 +103,67 @@ async def ingest() -> None:
               "вычислять между ними разности без общего набора версий")
 
 
-async def _attach(db, session: Session, path: Path, probe_code: str, ordinal: int, t: float) -> None:
+#: Значения, напечатанные на иллюстрации протокола растром (Р-40).
+#: В текстовый слой они не попадают, парсером не достаются — вводятся вручную.
+#: Ротация здесь ДУБЛИРУЕТ таблицу и служит сверкой: расхождение означало бы
+#: ошибку транскрипции. Перекос НЕ дублирует: таблица даёт 17 мм, схема — 9°,
+#: и это разные измеряемые величины (см. заголовок реестра 2026.4).
+FIGURE_TRANSCRIPTION: dict[str, float] = {
+    "DYN_PELVIC_OBLIQUITY_ANGLE": 9.0,          # «Перекос таза: 9° R»
+    "DYN_PELVIC_OBLIQUITY_ANGLE_ROM": 11.0,     # от «0° Лев.» до «11° Прав.»
+    "DYN_PELVIC_OBLIQUITY_ANGLE_ROM_MIN": 0.0,
+    "DYN_PELVIC_OBLIQUITY_ANGLE_ROM_MAX": 11.0,
+    "DYN_PELVIC_ROTATION": 5.0,                 # «Ротация таза: 5° R» — сверка
+}
+
+
+async def _transcribe_figure_values(db, session: Session, trial: Trial) -> None:
+    """Ручная транскрипция значений с иллюстрации, с отдельным источником.
+
+    Отдельная запись импорта, а не дописывание в разобранные params: у значения
+    должно быть прослеживаемое происхождение (§5). `source="manual"` и
+    `format_id="manual-figure-transcription-v1"` отличают его от приборного
+    разбора, флаг качества говорит, что число введено человеком.
+
+    Сверка: коды, которые есть и в разборе, и в транскрипции, обязаны совпасть.
+    Расхождение — ошибка ввода, и она останавливает загрузку, а не уезжает
+    молча в анализ.
+    """
+    from domain.hashing import file_hash
+
+    parsed: dict[str, float] = {}
+    for m in trial.measurements:
+        parsed.update({k: float(v) for k, v in (m.params or {}).items()})
+    mismatch = {
+        code: (parsed[code], value)
+        for code, value in FIGURE_TRANSCRIPTION.items()
+        if code in parsed and abs(parsed[code] - value) > 1e-6
+    }
+    if mismatch:
+        raise ValueError(f"транскрипция расходится с разбором протокола: {mismatch}")
+
+    payload = repr(sorted(FIGURE_TRANSCRIPTION.items())).encode()
+    record = RawImport(
+        session_id=session.id, file_hash=file_hash(payload),
+        modality="formetric_dynamic", format_id="manual-figure-transcription-v1",
+        source="manual", status="parsed",
+        reason="значения с иллюстрации протокола, введены вручную",
+    )
+    db.add(record)
+    await db.flush()
+    db.add(Measurement(
+        trial_id=trial.id, raw_import_id=record.id, modality="formetric_dynamic",
+        params={k: v for k, v in FIGURE_TRANSCRIPTION.items() if k not in parsed},
+        unmapped={}, quality_flags=["manually_transcribed_from_figure"],
+    ))
+    await db.flush()
+    checked = parsed.keys() & FIGURE_TRANSCRIPTION.keys()
+    print(f"  транскрипция иллюстрации: {len(FIGURE_TRANSCRIPTION) - len(checked)} новых "
+          f"значений, {len(checked)} сверено с таблицей")
+
+
+async def _attach(db, session: Session, path: Path, probe_code: str,
+                  ordinal: int, t: float) -> Trial:
     blob = path.read_bytes()
     parser, results = parse_blob(blob)
     bundle = bundle_from_settings(get_settings())
@@ -132,9 +194,12 @@ async def _attach(db, session: Session, path: Path, probe_code: str, ordinal: in
             trial_id=trial.id, raw_import_id=record.id, modality=res.modality,
             params=res.params, unmapped=res.unmapped, quality_flags=res.quality_flags,
         ))
+    store_figures(db, record, trial, results)
     await db.flush()
     print(f"  {probe_code}: {len(results[0].params)} параметров, "
           f"флаги {results[0].quality_flags or '—'}")
+    await db.refresh(trial, ["measurements"])
+    return trial
 
 
 if __name__ == "__main__":

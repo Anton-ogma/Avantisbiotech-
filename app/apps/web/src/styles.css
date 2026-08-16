@@ -367,4 +367,63 @@ button.pill[aria-pressed="true"] {
   .table-wrap table { min-width: 520px; }
 }
 
+/* ── Анатомические схемы и иллюстрации протокола (Р-40) ─────────────────────
+   Ряд схем прокручивается по горизонтали внутри себя, а не растягивает
+   страницу: правило «страница не едет вбок» действует на всех раскладках. */
+.fig-row {
+  display: flex; gap: 14px; overflow-x: auto; padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+}
+.fig {
+  flex: 0 0 auto; width: 210px; scroll-snap-align: start;
+  border: 1px solid var(--stroke); border-radius: 16px;
+  background: var(--surface-2); padding: 12px 12px 10px;
+  display: flex; flex-direction: column;
+}
+.fig-row.compact .fig { width: 168px; }
+.fig-title {
+  font-size: 12px; font-weight: 620; letter-spacing: 0.01em;
+  color: var(--text-2); margin-bottom: 6px;
+}
+.fig svg { width: 100%; height: auto; display: block; }
+.fig-caption {
+  margin-top: 8px; display: flex; flex-direction: column; gap: 2px;
+  font-size: 13px; font-weight: 620; color: var(--text);
+}
+.fig-caption .fig-sub { font-size: 11px; font-weight: 500; color: var(--text-3); }
+.fig-note { margin: 8px 0 0; font-size: 11px; line-height: 1.45; color: var(--text-3); }
+.fig-note-svg { font-size: 7px; fill: var(--text-3); }
+.fig-empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  min-height: 120px; font-size: 12px; color: var(--text-3); text-align: center;
+}
+
+/* Оригинальные иллюстрации протокола: миниатюры с раскрытием по клику. */
+.fig-strip { display: flex; gap: 12px; overflow-x: auto; align-items: center; padding-bottom: 4px; }
+.fig-thumb {
+  flex: 0 0 auto; padding: 6px; border-radius: 14px; cursor: zoom-in;
+  border: 1px solid var(--stroke); background: var(--surface-solid);
+}
+.fig-thumb img { max-height: 132px; width: auto; display: block; }
+.fig-strip.captions img {
+  max-height: 26px; width: auto; padding: 4px 8px; border-radius: 8px;
+  background: var(--surface-solid); border: 1px solid var(--stroke);
+}
+/* Тёмная тема: иллюстрации прибора напечатаны по белому. Инвертировать их
+   нельзя — исказятся цвета линий, — поэтому подложка остаётся светлой. */
+.fig-modal {
+  position: fixed; inset: 0; z-index: 60; display: flex;
+  flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  background: rgba(6, 9, 20, 0.72); backdrop-filter: blur(8px); padding: 24px;
+}
+.fig-modal img {
+  max-width: min(96vw, 900px); max-height: 76vh; width: auto;
+  background: #fff; padding: 12px; border-radius: 16px;
+}
+
+@media (max-width: 700px) {
+  .fig { width: 176px; }
+  .fig-row.compact .fig { width: 150px; }
+}
+
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

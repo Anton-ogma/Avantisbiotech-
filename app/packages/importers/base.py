@@ -11,6 +11,30 @@ class ParserNotFound(Exception):
     """Формат не распознан. MUST §5.1: файл не пропускается молча."""
 
 
+@dataclass(frozen=True, slots=True)
+class Figure:
+    """Иллюстрация из протокола прибора.
+
+    Печатный протокол formetric несёт не только таблицу: реконструкцию спины,
+    схему таза с линией перекоса, схему таза сверху с углом ротации. Часть
+    величин напечатана ТОЛЬКО на иллюстрации — растром, вне текстового слоя,
+    и парсером не читается. Выбрасывать такую картинку нельзя: молчаливая
+    потеря данных запрещена (§5.1) ровно так же, как для неканонических
+    столбцов, а оператору нужно видеть источник расхождения.
+
+    `kind` — что это, по геометрии, а не по догадке о содержании:
+      • `render`  — крупное изображение, реконструкция или схема;
+      • `caption` — узкая полоса с напечатанным значением (высота ≤ 40 px);
+      • `decor`   — логотип, линейка, разделитель.
+    """
+    name: str
+    mime: str
+    width: int
+    height: int
+    kind: str
+    data: bytes
+
+
 @dataclass(slots=True)
 class ParseResult:
     format_id: str
@@ -23,6 +47,8 @@ class ParseResult:
     unmapped: dict[str, str] = field(default_factory=dict)
     quality_flags: list[str] = field(default_factory=list)
     raw_row: dict[str, str] = field(default_factory=dict)
+    #: Иллюстрации протокола в порядке появления. Пусто для табличных форматов.
+    figures: list[Figure] = field(default_factory=list)
 
 
 @runtime_checkable

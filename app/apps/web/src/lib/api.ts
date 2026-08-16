@@ -114,10 +114,11 @@ export const api = {
   progress: () => call<any>("/research/progress"),
   measurements: (id: string) => call<Measurements>(`/sessions/${id}/measurements`),
   crossmodal: (id: string) => call<CrossModal>(`/sessions/${id}/crossmodal`),
-  /** Порядок проб канонизируется сортировкой: иначе один и тот же набор даёт
-   *  разные адреса, и автономный снимок промахивается мимо своего же ключа. */
-  compare: (id: string, probes: string[]) =>
-    call<CompareOut>(`/sessions/${id}/compare?probes=${[...probes].sort().join(",")}`),
+  /** Запрашивается ОДИН раз на сессию и отдаёт все пробы; выбор столбцов —
+   *  локальный. Прежняя схема «адрес на каждый набор» упиралась в число
+   *  заранее сгенерированных сочетаний и молча ограничивала сравнение. */
+  compare: (id: string) => call<CompareOut>(`/sessions/${id}/compare`),
+  figures: (id: string) => call<FiguresOut>(`/sessions/${id}/figures`),
   autoIngest: async (id: string, files: File[]) => {
     const form = new FormData();
     files.forEach((f) => form.append("files", f));
@@ -190,4 +191,17 @@ export interface MeasuredTrial {
 }
 export interface Measurements {
   session_id: string; started_at: string; device: string | null; trials: MeasuredTrial[];
+}
+
+/** Иллюстрация приборного протокола. `data_uri` приходит вместе с ответом:
+ *  контур замкнут, внешних CDN нет, а отдельный запрос за каждой картинкой на
+ *  экране сравнения — это десятки round-trip на одну сессию. */
+export interface FigureOut {
+  id: string; probe_code: string | null; probe_label_ru: string | null;
+  format_id: string | null; name: string; kind: "render" | "caption";
+  mime: string; width: number; height: number;
+  data_uri: string | null; url: string;
+}
+export interface FiguresOut {
+  session_id: string; figures: FigureOut[]; truncated: number; note: string;
 }

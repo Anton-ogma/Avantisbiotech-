@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer,
-    String, Text, UniqueConstraint,
+    LargeBinary, String, Text, UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -187,6 +187,33 @@ class RawImport(Base):
     status: Mapped[str] = mapped_column(String(16), default="queued")
     reason: Mapped[str | None] = mapped_column(Text)
     blob_ref: Mapped[str | None] = mapped_column(String(512))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class ImportFigure(Base):
+    """Иллюстрация приборного протокола (§5.1, Р-40).
+
+    Хранится байтами рядом с импортом, а не в объектном хранилище: картинки
+    протокола — десятки килобайт, их читают вместе с анализом, и отдельный
+    round-trip в S3 на каждую был бы дороже самой картинки. Сырой файл целиком
+    по-прежнему уходит в объектное хранилище (`RawImport.blob_ref`).
+
+    ПДн здесь не появляются: реконструкция поверхности спины обезличена так же,
+    как числа, — соответствие с человеком ведёт хост через `patient_ref` (Р-9).
+    """
+    __tablename__ = "import_figures"
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
+    raw_import_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("raw_imports.id", ondelete="CASCADE"), index=True)
+    trial_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("trials.id", ondelete="CASCADE"), index=True)
+    ordinal: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))       # render | caption
+    mime: Mapped[str] = mapped_column(String(32))
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
