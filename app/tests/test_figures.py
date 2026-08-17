@@ -273,3 +273,29 @@ async def test_filename_never_reaches_the_audit_log(client):
     dump = repr([r.payload for r in rows])
     assert "Петрова" not in dump
     assert any("suffix" in (r.payload or {}) for r in rows)
+
+
+def test_structures_are_read_from_the_printed_heading():
+    """Р-47: структура берётся из заголовка листа, а не из пикселей.
+
+    Прибор сам называет, о чём страница. Угадывать по виду картинки нельзя:
+    в отчёте догадка была бы неотличима от факта.
+    """
+    from importers.formetric_pdf import structures_in
+
+    assert structures_in("ПОДОГРАФИЯ · распределение нагрузки по стопам") == ("feet",)
+    assert "pelvis" in structures_in("Ротация таза 5° Прав.")
+    assert "knee" in structures_in("Ось ног: варус / вальгус")
+    assert structures_in("СКОРОСТЬ 3 km/h") == ()          # структура не названа
+
+
+def test_figures_carry_page_and_structures():
+    """Иллюстрация помнит, с какой страницы взята и о чём та страница."""
+    from importers import parse_blob
+
+    _, results = parse_blob(build_pdf(SAMPLE_IMAGES))
+    figures = results[0].figures
+    assert figures
+    assert all(f.page == 0 for f in figures)
+    # Текст синтетического листа говорит о тазе — значит, и иллюстрации о нём.
+    assert all("pelvis" in f.structures for f in figures)

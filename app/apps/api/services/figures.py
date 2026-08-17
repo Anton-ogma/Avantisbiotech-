@@ -37,6 +37,7 @@ def store_figures(
                 trial_id=trial.id if trial is not None else None,
                 ordinal=n, name=figure.name, kind=figure.kind, mime=figure.mime,
                 width=figure.width, height=figure.height, data=figure.data,
+                structures=list(figure.structures), page=figure.page,
             ))
             n += 1
     return n

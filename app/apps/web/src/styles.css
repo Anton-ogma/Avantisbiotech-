@@ -469,3 +469,13 @@ tr.row-bad td { background: rgba(214, 69, 95, 0.1); }
 }
 .fig-column-view { font-size: 11px; color: var(--text-3); padding-left: 4px; }
 @media (max-width: 700px) { .fig-column .fig { width: 176px; } }
+
+/* Сравнение проб по иллюстрациям отчёта: колонка на пробу (Р-47). */
+.report-column { width: 250px; }
+.report-column .report-grid { grid-template-columns: 1fr; }
+.report-cell { min-height: 90px; }
+.report-cell.empty {
+  display: flex; align-items: center; justify-content: center; min-height: 90px;
+  border: 1px dashed var(--stroke-strong); border-radius: 14px;
+  font-size: 12px; color: var(--text-3); text-align: center; padding: 10px;
+}

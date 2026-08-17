@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type FiguresOut, type MeasuredParam, type Measurements,
          type SessionOut } from "../lib/api";
 import { AnatomyCompare, type Orientation } from "../components/Anatomy";
-import { ProtocolFigures } from "../components/ProtocolFigures";
+import { ReportByStructure, ReportCompare } from "../components/ReportViews";
 import { Banner, Card, Empty, Segmented, Tile } from "../components/ui";
 
 const FLAG_RU: Record<string, string> = {
@@ -41,6 +41,9 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
   // пробе», несколько — на «чем пробы отличаются». Это разные вопросы.
   const [picked, setPicked] = useState<string[]>([]);
   const [orientation, setOrientation] = useState<Orientation>("rows");
+  // Схемы платформы — вторичны: иллюстрация берётся из отчёта DIERS, а
+  // перерисовка существует ради сравнения проб там, где листа отчёта нет.
+  const [showSchemes, setShowSchemes] = useState(false);
 
   useEffect(() => {
     if (!selected && sessions.length) setSelected(sessions[0].id);
@@ -60,7 +63,6 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
 
   const current = data?.trials.find((t) => t.trial_id === trial);
   const { paired, single } = current ? pairs(current.params) : { paired: [], single: [] };
-  const shownFigures = (figures?.figures ?? []).filter((f) => f.probe_code === current?.probe_code);
   /** Структурные величины измеряются один раз за сессию и по пробам не меняются
    *  (§14.2 п. 8). Дублировать их измерением в каждой пробе значило бы объявить
    *  сделанными измерения, которых не делали, — поэтому они подмешиваются к
@@ -114,19 +116,14 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
             ))}
           </Card>
 
-          {shownFigures.length > 0 && (
-            <>
-              <div className="section-title">Отчёт прибора · как напечатано</div>
-              <Card>
-                <ProtocolFigures figures={shownFigures} />
-              </Card>
-            </>
+          {current && (
+            <ReportByStructure figures={figures?.figures ?? []} probe={current.probe_code} />
           )}
 
           {data.trials.length > 0 && (
             <>
               <div className="row" style={{ marginTop: 26, marginBottom: 12 }}>
-                <div className="section-title" style={{ margin: 0 }}>Схемы по измерениям</div>
+                <div className="section-title" style={{ margin: 0 }}>Сравнение проб</div>
                 <span className="spacer" />
                 <Segmented value={orientation} onChange={setOrientation} options={[
                   { value: "rows", label: "Горизонтально" },
@@ -152,16 +149,39 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
                 </div>
                 <p className="tile-hint">
                   {orientation === "rows"
-                    ? "Строка — вид, столбцы — пробы: так сравнивают один показатель между пробами."
-                    : "Колонка — проба, виды сверху вниз: так читают пробу целиком."}
-                  {" "}Число проб не ограничено, ряд прокручивается.
+                    ? "Строка — структура, столбцы — пробы: так сравнивают одну структуру между пробами."
+                    : "Колонка — проба, структуры сверху вниз: так читают пробу целиком."}
+                  {" "}Число проб не ограничено, ряд прокручивается. Показаны
+                  иллюстрации отчёта DIERS; где листа нет — так и сказано.
                 </p>
+                <div className="row">
+                  <button className="pill" aria-pressed={showSchemes}
+                          onClick={() => setShowSchemes((v) => !v)}>
+                    {showSchemes ? "− схемы из чисел" : "+ схемы из чисел"}
+                  </button>
+                  <span className="tile-hint" style={{ flex: 1 }}>
+                    Дополнительно к иллюстрациям отчёта: та же геометрия, построенная
+                    из измеренных величин. Отчёт она не заменяет.
+                  </span>
+                </div>
                 {picked.length === 0 && (
                   <Empty text="Добавьте пробы, чтобы построить схемы." />
                 )}
               </Card>
 
               {picked.length > 0 && (
+                <ReportCompare
+                  figures={figures?.figures ?? []}
+                  orientation={orientation}
+                  probes={picked.map((id) => {
+                    const tr = data.trials.find((x) => x.trial_id === id);
+                    return { code: tr?.probe_code ?? id,
+                             label: (tr?.label_ru ?? id) };
+                  })}
+                />
+              )}
+
+              {showSchemes && picked.length > 0 && (
                 <AnatomyCompare orientation={orientation} probes={picked.map((id) => {
                   const tr = data.trials.find((x) => x.trial_id === id);
                   return {

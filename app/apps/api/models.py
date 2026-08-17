@@ -252,6 +252,10 @@ class ImportFigure(Base):
     mime: Mapped[str] = mapped_column(String(32))
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
+    #: Структуры со страницы, откуда взята иллюстрация (Р-47): spine, pelvis,
+    #: feet, knee. Определены по печатному заголовку, а не по пикселям.
+    structures: Mapped[list] = mapped_column(JSONB_, default=list)
+    page: Mapped[int] = mapped_column(Integer, default=0)
     data: Mapped[bytes] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 

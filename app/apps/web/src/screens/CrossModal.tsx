@@ -4,7 +4,7 @@ import { api, type CompareOut, type CrossModal as CM, type FiguresOut, type Meas
 import { AnatomyCompare, AnatomySet, type Orientation, type Values }
   from "../components/Anatomy";
 import { BodyMap, RegionBars } from "../components/BodyMap";
-import { ProtocolFigures } from "../components/ProtocolFigures";
+import { ReportByStructure, ReportCompare } from "../components/ReportViews";
 import { CondylarProfile, EmgMirror, SignalPanel, type Channel,
          type CondylarMetric } from "../components/Modality";
 import { DeltaChart } from "../components/DeltaChart";
@@ -47,6 +47,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
   const [region, setRegion] = useState("");
   const [view, setView] = useState<"single" | "table">("single");
   const [orientation, setOrientation] = useState<Orientation>("rows");
+  const [showSchemes, setShowSchemes] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { if (!selected && sessions.length) setSelected(sessions[0].id); }, [sessions, selected]);
@@ -242,7 +243,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
               {shown && shown.columns.length > 0 && (
                 <>
                   <div className="row" style={{ marginTop: 26, marginBottom: 12 }}>
-                    <div className="section-title" style={{ margin: 0 }}>Схемы по пробам</div>
+                    <div className="section-title" style={{ margin: 0 }}>Иллюстрации по пробам</div>
                     <span className="spacer" />
                     <Segmented value={orientation} onChange={setOrientation} options={[
                       { value: "rows", label: "Горизонтально" },
@@ -252,18 +253,33 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
                   <Card>
                     <p className="tile-hint" style={{ marginTop: 0 }}>
                       {orientation === "rows"
-                        ? "Строка — вид, столбцы — пробы: сравнение одного показателя между пробами."
-                        : "Колонка — проба, виды сверху вниз: чтение пробы целиком."}
-                      {" "}Схемы строятся из измеренных величин: угол проводится под
-                      измеренным углом, размах движения — веером от границы до границы.
+                        ? "Строка — структура, столбцы — пробы: сравнение одной структуры между пробами."
+                        : "Колонка — проба, структуры сверху вниз: чтение пробы целиком."}
+                      {" "}Иллюстрации берутся из отчёта DIERS; где листа нет — так и сказано.
                     </p>
+                    <ReportCompare
+                      figures={figures?.figures ?? []}
+                      orientation={orientation}
+                      probes={shown.columns.map((c) => ({
+                        code: c.code,
+                        label: c.code.replace(/^(MAND|PODAL|CTRL|CDG)_/, ""),
+                      }))}
+                    />
+                    <div className="row" style={{ marginTop: 12 }}>
+                      <button className="pill" aria-pressed={showSchemes}
+                              onClick={() => setShowSchemes((v) => !v)}>
+                        {showSchemes ? "− схемы из чисел" : "+ схемы из чисел"}
+                      </button>
+                    </div>
+                  </Card>
+                  {showSchemes && (
                     <AnatomyCompare orientation={orientation}
                                     probes={shown.columns.map((c) => ({
                       code: c.code,
                       label: c.code.replace(/^(MAND|PODAL|CTRL|CDG)_/, ""),
                       values: valuesByProbe.get(c.code) ?? {},
                     }))} />
-                  </Card>
+                  )}
                 </>
               )}
 
@@ -391,24 +407,26 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
 
           {current && (
             <>
-              {figures && figures.figures.some((f) => f.probe_code === current.probe_code) && (
-                <>
-                  <div className="section-title">Отчёт прибора · как напечатано</div>
-                  <Card>
-                    <ProtocolFigures figures={figures.figures} probe={current.probe_code} />
-                  </Card>
-                </>
-              )}
+              <ReportByStructure figures={figures?.figures ?? []} probe={current.probe_code} />
 
-              <div className="section-title">Схемы из измерений</div>
-              <Card>
-                <p className="tile-hint" style={{ marginTop: 0 }}>
-                  Не пересказ отчёта, а другой инструмент: одна и та же геометрия
-                  из чисел, поэтому пробы можно поставить рядом и сравнить. Отчёт
-                  прибора существует для одной пробы одного визита.
-                </p>
-                <AnatomySet values={valuesByProbe.get(current.probe_code) ?? {}} />
-              </Card>
+              <div className="row" style={{ marginTop: 26, marginBottom: 12 }}>
+                <div className="section-title" style={{ margin: 0 }}>Схемы из чисел</div>
+                <span className="spacer" />
+                <button className="pill" aria-pressed={showSchemes}
+                        onClick={() => setShowSchemes((v) => !v)}>
+                  {showSchemes ? "скрыть" : "показать"}
+                </button>
+              </div>
+              {showSchemes && (
+                <Card>
+                  <p className="tile-hint" style={{ marginTop: 0 }}>
+                    Дополнение к иллюстрациям отчёта, а не замена: та же геометрия
+                    из измеренных величин. Нужна там, где листа отчёта нет, и для
+                    сравнения проб между собой.
+                  </p>
+                  <AnatomySet values={valuesByProbe.get(current.probe_code) ?? {}} />
+                </Card>
+              )}
 
               <div className="section-title">Четыре сигнала пробы</div>
               <Card>

@@ -259,10 +259,13 @@ export interface FigureOut {
   id: string; probe_code: string | null; probe_label_ru: string | null;
   format_id: string | null; name: string; kind: "render" | "caption";
   mime: string; width: number; height: number;
+  /** Структуры со страницы отчёта: spine, pelvis, feet, knee. */
+  structures: string[]; page: number;
   data_uri: string | null; url: string;
 }
 export interface FiguresOut {
-  session_id: string; figures: FigureOut[]; truncated: number; note: string;
+  session_id: string; figures: FigureOut[]; truncated: number;
+  structures?: string[]; note: string;
 }
 
 /** Каталог мышц ЭМГ. `surface: false` — мышца существует, но поверхностными

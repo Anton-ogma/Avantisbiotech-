@@ -64,6 +64,8 @@ async def session_figures(
             "mime": figure.mime,
             "width": figure.width,
             "height": figure.height,
+            "structures": list(figure.structures or []),
+            "page": figure.page,
             "data_uri": None,
             "url": f"/figures/{figure.id}",
         }
@@ -81,6 +83,7 @@ async def session_figures(
         "session_id": str(session.id),
         "figures": out,
         "truncated": truncated,
+        "structures": sorted({s for f in out for s in f["structures"]}),
         "note": (
             "Иллюстрации протокола прибора. Значения, напечатанные на них "
             "растром, в текстовый слой не попадают и парсером не читаются: "

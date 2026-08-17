@@ -28,6 +28,31 @@ _MIN_SIDE = 80
 _CAPTION_MAX_H = 100
 _CAPTION_MIN_RATIO = 2.0
 
+#: Структура тела → слова, которыми её называет печатный отчёт DIERS.
+#:
+#: Классификация идёт по ЗАГОЛОВКУ И ПОДПИСЯМ СТРАНИЦЫ, а не по изображению.
+#: Прибор сам называет, о чём лист; читать это — факт, а угадывать структуру по
+#: пикселям — догадка, и в отчёте она была бы неотличима от факта.
+STRUCTURE_WORDS: dict[str, tuple[str, ...]] = {
+    "spine": ("позвоночник", "кифоз", "лордоз", "сколиоз", "отклонение",
+              "ротация позвонк", "остист", "spine", "kyphotic", "lordotic",
+              "vertebral", "формометр", "formetric", "поверхност"),
+    "pelvis": ("таз", "перекос таза", "ротация таза", "торсия", "pelvic",
+               "pelvis", "obliquity"),
+    "feet": ("стоп", "подометр", "подограф", "давлени", "нагрузк", "опор",
+             "pedoscan", "plantar", "foot", "feet", "центр давления"),
+    "knee": ("колен", "ось ног", "варус", "вальгус", "knee", "leg axis",
+             "varus", "valgus"),
+}
+
+
+def structures_in(text: str) -> tuple[str, ...]:
+    """Какие структуры названы на странице. Порядок фиксирован для устойчивости."""
+    low = text.lower()
+    return tuple(key for key, words in STRUCTURE_WORDS.items()
+                 if any(w in low for w in words))
+
+
 #: Подпись параметра в протоколе → (код значения, код размаха).
 ROW_MAP: dict[str, tuple[str, str]] = {
     "Угол кифоза ICT-ITL (макс.)": ("DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX", "DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM"),
@@ -233,12 +258,13 @@ class FormetricPdfProtocolParser:
         except ImportError as e:                           # pragma: no cover
             raise ValueError("для разбора PDF нужен pypdf") from e
         out: list[tuple[str, list[Figure]]] = []
-        for page in PdfReader(io.BytesIO(blob)).pages:
-            out.append(((page.extract_text() or ""), self._page_figures(page)))
+        for index, page in enumerate(PdfReader(io.BytesIO(blob)).pages):
+            text = page.extract_text() or ""
+            out.append((text, self._page_figures(page, structures_in(text), index)))
         return out
 
     @staticmethod
-    def _page_figures(page) -> list[Figure]:
+    def _page_figures(page, structures: tuple[str, ...] = (), index: int = 0) -> list[Figure]:
         try:
             images = list(page.images)
         except Exception:                                  # pragma: no cover
@@ -255,7 +281,7 @@ class FormetricPdfProtocolParser:
                 continue
             mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
             out.append(Figure(name=im.name, mime=mime, width=w, height=h,
-                              kind=kind, data=data))
+                              kind=kind, data=data, structures=structures, page=index))
         return out
 
 
