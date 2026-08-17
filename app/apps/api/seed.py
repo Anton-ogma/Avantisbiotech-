@@ -56,6 +56,17 @@ BASE_LOAD_LEFT = 47.5
 #: сдвигов по пробам не получает. Кладётся один раз на сессию.
 BASE_LEG_AXIS = {"LEG_AXIS_VARUS_VALGUS_L": -3.2, "LEG_AXIS_VARUS_VALGUS_R": 2.4}
 
+#: Динамика Dynamic4D: та же поза, снятая на дорожке. Отдельный набор величин,
+#: а не пересчёт статики — прибор меряет максимум за цикл шага и размах движения.
+BASE_DYNAMIC = {
+    "DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX": 46.0, "DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM": 7.5,
+    "DYN_LORDOTIC_ANGLE_ITL_ILS_MAX": 40.0, "DYN_LORDOTIC_ANGLE_ITL_ILS_ROM": 5.0,
+    "DYN_PELVIC_ROTATION": 4.0, "DYN_PELVIC_ROTATION_ROM": 8.0,
+    "DYN_PELVIC_OBLIQUITY": 12.0, "DYN_PELVIC_OBLIQUITY_ROM": 13.0,
+    "DYN_PELVIC_OBLIQUITY_ANGLE": 6.0,
+    "DYN_SAGITTAL_IMBALANCE_VP_DM": 4.0, "DYN_SAGITTAL_IMBALANCE_VP_DM_ROM": 4.0,
+}
+
 #: Изометрическая сила под пробой (Р-41): в этом протоколе myoline ставится на
 #: тех же условиях, что формометрия, ЭМГ и кондилография.
 BASE_MYO = {
@@ -86,6 +97,24 @@ EFFECTS = {
         "TRUNK_IMBALANCE_VP_DM": -1.5, "VERTEBRAL_ROTATION_RMS": -1.2,
         "PELVIC_OBLIQUITY_ANGLE": -1.7, "PELVIC_ROTATION": -1.0,
     },
+}
+
+#: Динамические эффекты заданы ИНАЧЕ статических — намеренно. Именно ради этого
+#: контраста режимы и разделены (Р-50): сжатие зубов заметно двигает позу стоя,
+#: но при ходьбе почти не проявляется, а латеротрузия влево наоборот — стоя тиха,
+#: а на дорожке меняет ротацию таза и размах движения. Свести их в один столбец
+#: значило бы стереть ровно ту закономерность, которую ищут.
+DYN_EFFECTS = {
+    "MAND_CLENCH": {"DYN_PELVIC_ROTATION": 0.4, "DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX": 0.3},
+    "MAND_LAT_LEFT": {"DYN_PELVIC_ROTATION": -2.3, "DYN_PELVIC_ROTATION_ROM": -1.8,
+                      "DYN_PELVIC_OBLIQUITY": -1.6, "DYN_PELVIC_OBLIQUITY_ANGLE": -1.4},
+    "MAND_LAT_RIGHT": {"DYN_PELVIC_ROTATION": 1.9, "DYN_PELVIC_OBLIQUITY": 1.3},
+    "MAND_SPLINT_THERAPEUTIC": {
+        "DYN_PELVIC_OBLIQUITY": -2.1, "DYN_PELVIC_OBLIQUITY_ANGLE": -1.9,
+        "DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX": -1.4, "DYN_SAGITTAL_IMBALANCE_VP_DM": -1.2,
+    },
+    "PODAL_WEDGE_L": {"DYN_PELVIC_OBLIQUITY": -1.5, "DYN_PELVIC_ROTATION_ROM": -0.9},
+    "CTRL_SHAM_MANDIBULAR": {"DYN_PELVIC_ROTATION": 0.2},
 }
 
 #: Сила и мышечная активность под пробой, в единицах SDC. Сжатие даёт классический
@@ -231,6 +260,23 @@ async def seed(patients: int = 6) -> None:
                     db.add(Measurement(trial_id=trial.id, modality=modality,
                                        params=params, quality_flags=flags))
 
+                dyn: dict[str, float] = {}
+                for param, base_value in BASE_DYNAMIC.items():
+                    sdc = bundle.thresholds.sdc(param) or 1.0
+                    shift = DYN_EFFECTS.get(code, {}).get(param, 0.0) * sdc
+                    dyn[param] = round(base_value * personal_scale + shift
+                                       + rng.gauss(0, sdc * 0.2), 2)
+                # Границы размаха печатаются прибором отдельно; здесь они
+                # выводятся из максимума и размаха, как на листе.
+                for base in ("DYN_PELVIC_ROTATION", "DYN_PELVIC_OBLIQUITY"):
+                    span = dyn.get(f"{base}_ROM")
+                    if span is not None:
+                        dyn[f"{base}_ROM_MIN"] = round(dyn[base] - span / 2, 2)
+                        dyn[f"{base}_ROM_MAX"] = round(dyn[base] + span / 2, 2)
+                db.add(Measurement(
+                    trial_id=trial.id, modality="formetric_dynamic", params=dyn,
+                    quality_flags=["gait_speed_3kmh"],
+                ))
                 db.add(Measurement(trial_id=trial.id, modality="pedoscan",
                                    params=_pedoscan(code, personal_scale, rng)))
                 if position == 0:

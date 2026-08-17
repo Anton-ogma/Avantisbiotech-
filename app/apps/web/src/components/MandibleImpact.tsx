@@ -14,7 +14,7 @@
  *  Разница существенна — именно в этой графе живут закономерности, которых ещё
  *  никто не назвал, и записать их в «ухудшение» значило бы потерять их.
  */
-import type { CrossModal, ProbeSynthesis } from "../lib/api";
+import type { CrossModal, ProbeSynthesis, Signal } from "../lib/api";
 import { Banner, Card, Empty } from "./ui";
 
 /** Пробы положения челюсти. Клин под пятку и sham отвечают на другие вопросы. */
@@ -46,6 +46,33 @@ const BUCKET: Record<Bucket, { title: string; tone: string; hint: string }> = {
     hint: "под этой пробой нет формометрии — это отсутствие данных, а не результат",
   },
 };
+
+/** Ячейка режима: значимо / в шуме / не снималось. Три состояния, не два:
+ *  «не снималось» — отсутствие данных, и выдавать его за «нет изменений»
+ *  значит объявить результатом то, чего не измеряли. */
+function ModeCell({ signal }: { signal?: Signal }) {
+  if (!signal || !signal.available) {
+    return <span className="muted">не снималось</span>;
+  }
+  if (signal.delta === null) return <span className="muted">Δ не вычислен</span>;
+  const big = signal.reliable;
+  // Знак показывается ТОЛЬКО когда направление установлено. Иначе «+8.53»
+  // рядом с «−11.32» читается как ухудшение, хотя это лишь величина сдвига:
+  // у динамических параметров направление по умолчанию не установлено (Р-18).
+  const signed = signal.detail.includes("направление установлено");
+  const value = signed
+    ? `${signal.delta > 0 ? "+" : ""}${signal.delta.toFixed(2)}`
+    : `|Δ| ${Math.abs(signal.delta).toFixed(2)}`;
+  return (
+    <>
+      <span className={`badge ${big ? "accent" : ""}`}>{value}</span>
+      <div className="tile-hint">
+        {big ? "значимо" : "в пределах шума"}
+        {!signed && big ? " · знак не установлен" : ""}
+      </div>
+    </>
+  );
+}
 
 function bucketOf(p: ProbeSynthesis): Bucket {
   if (!p.posture.available) return "not_measured";
@@ -109,6 +136,13 @@ export function MandibleImpact({ data }: { data: CrossModal }) {
           собственного разброса повторного измерения. Классификация описывает
           измеренный отклик, а не назначение: переход к «назначить» делает врач.
         </p>
+        <p className="tile-hint">
+          Столбцы «стоя» и «при ходьбе» — тот же отклик, посчитанный по статическим
+          и динамическим величинам ОТДЕЛЬНО. Это разные измерения одной позы, и
+          положение челюсти может двигать одно, не трогая другое; свёрнутые в
+          общий столбец, они это скрывают. «Не снималось» — отсутствие данных,
+          а не отсутствие изменений.
+        </p>
 
         {groups.changes_known.concat(groups.changes_unsigned)
           .some((p) => p.role === "control") && (
@@ -132,6 +166,8 @@ export function MandibleImpact({ data }: { data: CrossModal }) {
                   <tr>
                     <th>Положение челюсти</th>
                     <th className="num">Δ позы, SDC</th>
+                    <th className="num">Стоя</th>
+                    <th className="num">При ходьбе</th>
                     <th>Что сдвинулось сильнее всего</th>
                     <th>Согласованность</th>
                   </tr>
@@ -163,6 +199,8 @@ export function MandibleImpact({ data }: { data: CrossModal }) {
                             </>
                           )}
                         </td>
+                        <td className="num"><ModeCell signal={p.posture_static} /></td>
+                        <td className="num"><ModeCell signal={p.posture_dynamic} /></td>
                         <td>
                           {top.length === 0 ? <span className="muted">—</span> : top.map((x) => (
                             <div key={x.code} className="tile-hint">

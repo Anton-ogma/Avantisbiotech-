@@ -28,7 +28,10 @@ def _out(p: ProbeSynthesis, spec=None) -> dict:
         # отвечают на другие вопросы и в этот список не идут.
         "group": spec.group if spec else "unknown",
         "role": spec.role if spec else "unknown",
-        "posture": _signal(p.posture), "joint": _signal(p.joint),
+        "posture": _signal(p.posture),
+        "posture_static": _signal(p.posture_static),
+        "posture_dynamic": _signal(p.posture_dynamic),
+        "joint": _signal(p.joint),
         "muscle": _signal(p.muscle), "strength": _signal(p.strength),
         "coherence": p.coherence, "verdict": p.verdict, "verdict_ru": p.verdict_ru,
         "rationale": p.rationale,

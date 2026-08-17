@@ -52,6 +52,11 @@ class ProbeSynthesis:
     probe_code: str
     label_ru: str
     posture: ModalitySignal
+    #: Тот же постуральный отклик, разложенный по РЕЖИМУ измерения (Р-50).
+    #: Стоя и при ходьбе — разные измерения одной позы, и проба может двигать
+    #: одно, не трогая другое. Свёрнутые в один сигнал, они это скрывают.
+    posture_static: ModalitySignal
+    posture_dynamic: ModalitySignal
     joint: ModalitySignal
     muscle: ModalitySignal
     strength: ModalitySignal
@@ -167,6 +172,36 @@ def synthesize_probe(
         posture = ModalitySignal(False, None, False, "нет формометрии для этой пробы")
         direction_known = False
 
+    # ── Поза по режимам: стоя и при ходьбе ───────────────────────────────────
+    # Режим определяется МОДАЛЬНОСТЬЮ параметра, а не полем пробы: значения сами
+    # говорят, чем сняты. Поле `mode` описывает, как проходила проба, и при
+    # смешанной записи разошлось бы с составом величин.
+    def _mode_signal(modalities: set[str], label: str) -> ModalitySignal:
+        trial_part = {c: v for c, v in trial_values.items()
+                      if (s := bundle.registry.get(c)) and s.modality in modalities}
+        base_part = {c: v for c, v in baseline_values.items() if c in trial_part}
+        if not trial_part or not base_part:
+            return ModalitySignal(False, None, False, f"нет измерений {label}")
+        effects_part = [param_effect(c, base_part[c], trial_part[c], bundle)
+                        for c in sorted(base_part)]
+        ri_part = response_index({e.code: e.delta for e in effects_part}, bundle).total
+        signed_part = sum(
+            1 if e.interpretation == "worsening" else -1 if e.interpretation == "improving" else 0
+            for e in effects_part)
+        delta_part = None if ri_part is None else round(
+            ri_part if signed_part >= 0 else -ri_part, 4)
+        known = any(e.interpretation is not None for e in effects_part
+                    if e.confidence in ("probable", "reliable"))
+        return ModalitySignal(
+            available=True, delta=delta_part,
+            reliable=delta_part is not None and abs(delta_part) >= threshold,
+            detail=("направление установлено" if known else "направление не установлено"),
+            params=effects_part,
+        )
+
+    posture_static = _mode_signal({"formetric", "pedoscan"}, "стоя")
+    posture_dynamic = _mode_signal({"formetric_dynamic"}, "при ходьбе")
+
     # ── Сустав ───────────────────────────────────────────────────────────────
     a_trial = joint_asymmetry(_split(trial_values, bundle, "condylography"))
     a_base = joint_asymmetry(_split(baseline_values, bundle, "condylography"))
@@ -242,7 +277,9 @@ def synthesize_probe(
     return ProbeSynthesis(
         probe_code=probe_code,
         label_ru=spec.label_ru if spec else probe_code,
-        posture=posture, joint=joint, muscle=muscle, strength=strength,
+        posture=posture, posture_static=posture_static,
+        posture_dynamic=posture_dynamic,
+        joint=joint, muscle=muscle, strength=strength,
         coherence=coh, verdict=verdict, verdict_ru=VERDICT_RU[verdict],
         excursion=excursion, rationale=rationale,
     )

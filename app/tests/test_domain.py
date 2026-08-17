@@ -378,3 +378,35 @@ def test_analysis_reports_the_threshold_it_used(bundle):
     result = analyze(session, bundle)
     assert result.threshold == (bundle.thresholds.sdc("PI") or 1.0)
     assert result.threshold > 0
+
+
+def test_posture_is_split_by_measurement_mode(bundle):
+    """Р-50: стоя и при ходьбе — разные измерения одной позы.
+
+    Проба может двигать одно, не трогая другое; свёрнутые в общий сигнал, они
+    это скрывают, а именно такое расхождение и есть предмет поиска.
+    """
+    from domain.crossmodal import synthesize_probe
+
+    base = {"LATERAL_DEVIATION_RMS": 6.0, "PELVIC_TILT": 10.0,
+            "DYN_PELVIC_ROTATION": 4.0, "DYN_PELVIC_OBLIQUITY": 12.0}
+    # Статика сдвинулась заметно, динамика — нет.
+    trial = {**base, "LATERAL_DEVIATION_RMS": 12.0, "PELVIC_TILT": 16.0}
+    s = synthesize_probe("MAND_CLENCH", trial, base, bundle)
+
+    assert s.posture_static.available and s.posture_dynamic.available
+    assert s.posture_static.reliable is True
+    assert s.posture_dynamic.delta == 0.0
+    assert s.posture_dynamic.reliable is False
+
+
+def test_missing_mode_is_stated_not_counted_as_zero(bundle):
+    """«Не снималось» — отсутствие данных, а не отсутствие изменений."""
+    from domain.crossmodal import synthesize_probe
+
+    base = {"LATERAL_DEVIATION_RMS": 6.0}
+    s = synthesize_probe("MAND_CLENCH", {"LATERAL_DEVIATION_RMS": 12.0}, base, bundle)
+    assert s.posture_static.available is True
+    assert s.posture_dynamic.available is False
+    assert s.posture_dynamic.delta is None
+    assert "нет измерений при ходьбе" in s.posture_dynamic.detail

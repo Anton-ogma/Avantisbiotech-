@@ -195,6 +195,8 @@ export interface Signal { available: boolean; delta: number | null; reliable: bo
 export interface ProbeSynthesis {
   probe_code: string; label_ru: string; group?: string; role?: string;
   posture: Signal; joint: Signal; muscle: Signal; strength: Signal;
+  /** Тот же отклик по режимам: стоя и при ходьбе — разные измерения позы. */
+  posture_static?: Signal; posture_dynamic?: Signal;
   coherence: string; verdict: string; verdict_ru: string; rationale: string;
   excursion: { status: string; delta_mm: number | null; message: string } | null;
   strength_params: { code: string; label_ru: string; delta: number; effect_size: number | null;
