@@ -90,6 +90,8 @@ export interface AnalysisResult {
     computable: boolean; reason: string | null;
   };
   low_confidence: boolean; responses: ProbeResponse[];
+  /** Порог значимости в единицах SDC: «значимо» без него — слово без содержания. */
+  threshold: number;
   shortlist: string[]; notable_worsening: string[];
   responsive_unsigned: string[]; in_noise: string[]; warnings: string[];
 }
@@ -191,7 +193,7 @@ export const api = {
 
 export interface Signal { available: boolean; delta: number | null; reliable: boolean; detail: string }
 export interface ProbeSynthesis {
-  probe_code: string; label_ru: string;
+  probe_code: string; label_ru: string; group?: string; role?: string;
   posture: Signal; joint: Signal; muscle: Signal; strength: Signal;
   coherence: string; verdict: string; verdict_ru: string; rationale: string;
   excursion: { status: string; delta_mm: number | null; message: string } | null;
@@ -208,6 +210,7 @@ export interface CrossModal {
   session_level?: { myoline: Record<string, number>; note: string };
   probes: ProbeSynthesis[];
   ranking: Record<string, string[]>;
+  threshold?: number; thresholds_are_demo?: boolean;
   note?: string;
   warning?: string;
 }

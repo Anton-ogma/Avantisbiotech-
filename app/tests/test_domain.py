@@ -350,3 +350,31 @@ def test_strength_asymmetry_is_not_folded_into_the_index(bundle):
     force = {"MYO_FORCE_TRUNK_EXT": 405.0}
     assert strength_index(force, bundle) == strength_index(
         {**force, "MYO_ASYM_TRUNK_LAT": 25.0}, bundle)
+
+
+def test_analysis_reports_the_threshold_it_used(bundle):
+    """Р-49: «значимо» без названного порога — слово без содержания.
+
+    Отчёт подсвечивает положения челюсти, сдвинувшие позу выше порога, и обязан
+    показать сам порог: иначе читатель не может проверить утверждение.
+    """
+    from domain.analysis import SessionInput, TrialInput, analyze
+
+    base = {"LATERAL_DEVIATION_RMS": 6.0, "PELVIC_TILT": 10.0}
+    def trial(tid, code, t, neutral, values):
+        return TrialInput(trial_id=tid, probe_code=code, role="reference" if neutral
+                          else "diagnostic", pass_no=1, t=t, is_neutral=neutral, values=values)
+
+    session = SessionInput(
+        session_id="s1", patient_ref="pref-test0001", study_mode=False,
+        neutral_definition="habitual_occlusion",
+        trials=[
+            trial("t1", "MAND_NEUTRAL_WITH_APPARATUS", 0.0, True, base),
+            trial("t2", "MAND_CLENCH", 400.0, False,
+                  {**base, "LATERAL_DEVIATION_RMS": 12.0}),
+            trial("t3", "MAND_NEUTRAL_WITH_APPARATUS", 800.0, True, base),
+        ],
+    )
+    result = analyze(session, bundle)
+    assert result.threshold == (bundle.thresholds.sdc("PI") or 1.0)
+    assert result.threshold > 0

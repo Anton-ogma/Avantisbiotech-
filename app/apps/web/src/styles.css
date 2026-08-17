@@ -479,3 +479,8 @@ tr.row-bad td { background: rgba(214, 69, 95, 0.1); }
   border: 1px dashed var(--stroke-strong); border-radius: 14px;
   font-size: 12px; color: var(--text-3); text-align: center; padding: 10px;
 }
+
+/* Строка положения челюсти, значимо сдвинувшего позу (Р-49): подсветка — это
+   ответ на главный вопрос отчёта, и он не должен теряться среди строк. */
+tr.row-accent td { background: var(--accent-glow); }
+tr.row-accent td:first-child { box-shadow: inset 3px 0 0 var(--accent); }

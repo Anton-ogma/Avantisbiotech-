@@ -73,6 +73,71 @@ export function SessionView({ sessionId, onBack }: { sessionId: string; onBack: 
         </div>
       </Card>
 
+      <div className="section-title">Положение челюсти, меняющее позу</div>
+      <Card>
+        {(() => {
+          const mand = r.responses.filter(
+            (x) => x.pass_no === 1 && x.probe_code.startsWith("MAND_"));
+          if (mand.length === 0) {
+            return <Empty text="В сессии нет проб положения нижней челюсти." />;
+          }
+          const moving = mand.filter(
+            (x) => x.delta_index !== null && Math.abs(x.delta_index) >= r.threshold);
+          const sorted = [...mand].sort(
+            (a, b) => Math.abs(b.delta_index ?? 0) - Math.abs(a.delta_index ?? 0));
+          return (
+            <>
+              <p className="tile-hint" style={{ marginTop: 0 }}>
+                {moving.length === 0
+                  ? `Ни одно из ${mand.length} положений не сдвинуло позу выше порога.`
+                  : `Позу меняют ${moving.length} положения из ${mand.length}.`}
+                {" "}Значимо — |Δ{r.index_kind}| ≥ {r.threshold} SDC: сдвиг больше
+                собственного разброса повторного измерения.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Положение челюсти</th><th className="num">Δ{r.index_kind}</th>
+                      <th>Оценка</th><th>Достоверность</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sorted.map((x) => {
+                      const d = x.delta_index;
+                      const big = d !== null && Math.abs(d) >= r.threshold;
+                      const verdict = !big ? "в пределах шума"
+                        : !x.direction_known ? "меняет позу, знак не установлен"
+                        : d! < 0 ? "поза улучшается" : "поза ухудшается";
+                      return (
+                        <tr key={x.probe_code + x.pass_no}
+                            className={big ? "row-accent" : undefined}>
+                          <td>
+                            {x.probe_code.replace(/^MAND_/, "")}
+                            <div className="mono">{x.probe_code}</div>
+                          </td>
+                          <td className="num">{d === null ? "—" : d.toFixed(2)}</td>
+                          <td>{verdict}</td>
+                          <td className="tile-hint">
+                            {x.confidence}
+                            {x.confirmed ? " · подтверждено вторым проходом" : ""}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="tile-hint">
+                Оценка описывает измеренный отклик, а не назначение. Проба без
+                установленного направления не попадает ни в улучшения, ни в
+                ухудшения: назначить ей знак нечем (Р-18).
+              </p>
+            </>
+          );
+        })()}
+      </Card>
+
       <div className="section-title">Параметры выбранной пробы</div>
       <Card>
         <div className="row" style={{ marginBottom: 14 }}>

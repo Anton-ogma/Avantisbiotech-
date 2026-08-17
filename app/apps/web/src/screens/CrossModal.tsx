@@ -4,6 +4,7 @@ import { api, type CompareOut, type CrossModal as CM, type FiguresOut, type Meas
 import { AnatomyCompare, AnatomySet, type Orientation, type Values }
   from "../components/Anatomy";
 import { BodyMap, RegionBars } from "../components/BodyMap";
+import { MandibleImpact } from "../components/MandibleImpact";
 import { ReportByStructure, ReportCompare } from "../components/ReportViews";
 import { CondylarProfile, EmgMirror, SignalPanel, type Channel,
          type CondylarMetric } from "../components/Modality";
@@ -193,6 +194,8 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
         </Card>
       ) : (
         <>
+          <MandibleImpact data={data} />
+
           <div className="section-title">Раскладка проб</div>
           <div className="grid cols-3">
             {["best", "worse", "conflicting", "unsigned", "neutral", "no_posture"]

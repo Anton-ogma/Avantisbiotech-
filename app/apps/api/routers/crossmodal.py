@@ -20,9 +20,14 @@ def _signal(s) -> dict:
     return {"available": s.available, "delta": s.delta, "reliable": s.reliable, "detail": s.detail}
 
 
-def _out(p: ProbeSynthesis) -> dict:
+def _out(p: ProbeSynthesis, spec=None) -> dict:
     return {
         "probe_code": p.probe_code, "label_ru": p.label_ru,
+        # Группа пробы нужна отчёту: вопрос «какое положение челюсти меняет
+        # позу» относится к мандибулярным пробам, а клин под пятку и sham
+        # отвечают на другие вопросы и в этот список не идут.
+        "group": spec.group if spec else "unknown",
+        "role": spec.role if spec else "unknown",
         "posture": _signal(p.posture), "joint": _signal(p.joint),
         "muscle": _signal(p.muscle), "strength": _signal(p.strength),
         "coherence": p.coherence, "verdict": p.verdict, "verdict_ru": p.verdict_ru,
@@ -104,8 +109,12 @@ async def crossmodal(
                     "сравнение проб не входит. Сила, измеренная под пробой, "
                     "показана в самой пробе четвёртым сигналом (Р-41).",
         },
-        "probes": [_out(p) for p in syntheses],
+        "probes": [_out(p, bundle.probes.get(p.probe_code)) for p in syntheses],
         "ranking": {k: [p.probe_code for p in v] for k, v in ranking.items()},
+        # Порог значимости: та же величина, по которой вынесены вердикты.
+        # Отчёт обязан называть её, иначе «значимо» — слово без содержания.
+        "threshold": bundle.thresholds.sdc("PI") or 1.0,
+        "thresholds_are_demo": "demo" in (bundle.thresholds.version or ""),
         "note": (
             "Классификация описывает измеренный отклик, а не назначение: "
             "в режиме research движок правил выключен, переход от «даёт наибольшее "

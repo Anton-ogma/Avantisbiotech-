@@ -57,6 +57,9 @@ class AnalysisResult:
     drift: dict[str, Any]
     low_confidence: bool
     responses: list[dict[str, Any]]
+    #: Порог значимости отклика, в единицах SDC. Отчёт обязан называть его
+    #: числом: «значимо» без порога — слово без содержания (Р-49).
+    threshold: float
     shortlist: list[str]
     notable_worsening: list[str]
     responsive_unsigned: list[str]
@@ -234,6 +237,7 @@ def analyze(session: SessionInput, bundle: ConfigBundle, *, interim: bool = Fals
             "delta_strength": r.delta_strength,
             "params": _effects_to_dict(r.params, bundle),
         } for r in responses],
+        threshold=threshold,
         shortlist=shortlist_codes,
         notable_worsening=[r.probe_code for r in lists.notable_worsening],
         responsive_unsigned=[r.probe_code for r in lists.responsive_unsigned],
