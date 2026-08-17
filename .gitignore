@@ -14,3 +14,7 @@ app/apps/web/tsconfig.tsbuildinfo
 # обследования. Воспроизводится скриптом, а не хранением.
 app/apps/web/public/snapshot.js
 app/apps/web/dist/
+
+# Печатные отчёты приборов: их текстовый слой несёт ФИО пациента (Р-9, ФЗ-152).
+# Подключаются локально через DIERS_MYOLINE_REPORT / DIERS_SNAPSHOT_PROTOCOL_PDF.
+app/tests/fixtures/*.pdf

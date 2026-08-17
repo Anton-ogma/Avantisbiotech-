@@ -92,7 +92,7 @@ regions:
     order: 13
     label_ru: "Изометрическая сила"
     hint: "четвёртый сигнал пробы (Р-41): сравнивается между пробами, но в PI/RI не входит"
-    prefixes: ["MYO_FORCE_", "MYO_ASYM_"]
+    prefixes: ["MYO_FORCE_", "MYO_ASYM_", "MYO_PCT_", "MYO_RATIO_"]
     structural: false
   - key: condition
     order: 14

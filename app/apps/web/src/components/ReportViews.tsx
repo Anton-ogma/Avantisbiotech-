@@ -11,7 +11,7 @@
  */
 import { useState } from "react";
 import type { FigureOut } from "../lib/api";
-import { Card, Empty } from "./ui";
+import { Card } from "./ui";
 import { groupFigures } from "./ProtocolFigures";
 
 export const STRUCTURE_RU: Record<string, string> = {
@@ -19,8 +19,9 @@ export const STRUCTURE_RU: Record<string, string> = {
   pelvis: "Таз",
   knee: "Колени и ось ног",
   feet: "Стопы и опора",
+  strength: "Изометрическая сила",
 };
-export const STRUCTURE_ORDER = ["spine", "pelvis", "knee", "feet"];
+export const STRUCTURE_ORDER = ["spine", "pelvis", "knee", "feet", "strength"];
 
 const forStructure = (figures: FigureOut[], structure: string) =>
   figures.filter((f) => (f.structures ?? []).includes(structure));
@@ -57,34 +58,40 @@ export function ReportByStructure({ figures, probe }: { figures: FigureOut[]; pr
   const mine = probe ? figures.filter((f) => f.probe_code === probe) : figures;
   const unclassified = mine.filter((f) => (f.structures ?? []).length === 0);
 
+  const present = STRUCTURE_ORDER.filter((k) => forStructure(mine, k).length > 0);
+  const missing = STRUCTURE_ORDER.filter((k) => !present.includes(k));
+
   return (
     <>
-      {STRUCTURE_ORDER.map((key) => {
+      {present.map((key) => {
         const list = forStructure(mine, key);
         return (
           <div key={key}>
             <div className="section-title">{STRUCTURE_RU[key]} · из отчёта DIERS</div>
             <Card>
-              {list.length === 0 ? (
-                <Empty text={
-                  "В загруженных страницах отчёта иллюстрации этой структуры нет. "
-                  + "Загрузите соответствующие листы — они разложатся сюда сами."
-                } />
-              ) : (
-                <>
-                  <Plate figures={list} onOpen={setOpen} />
-                  {list.some((f) => (f.structures ?? []).length > 1) && (
-                    <p className="tile-hint">
-                      Лист отчёта называет несколько структур сразу, поэтому его
-                      иллюстрации показаны в каждом из названных разделов.
-                    </p>
-                  )}
-                </>
+              <Plate figures={list} onOpen={setOpen} />
+              {list.some((f) => (f.structures ?? []).length > 1) && (
+                <p className="tile-hint">
+                  Лист отчёта называет несколько структур сразу, поэтому его
+                  иллюстрации показаны в каждом из названных разделов.
+                </p>
               )}
             </Card>
           </div>
         );
       })}
+
+      {/* Отсутствующие структуры перечисляются одной строкой, а не пятью пустыми
+          блоками: и то и другое честно, но пустые блоки прячут то, что есть. */}
+      {missing.length > 0 && (
+        <Card>
+          <p className="tile-hint" style={{ margin: 0 }}>
+            {present.length === 0 ? "Иллюстраций отчёта в этой пробе нет." : "Нет листов отчёта:"}{" "}
+            {missing.map((k) => STRUCTURE_RU[k]).join(", ")}. Загрузите
+            соответствующие страницы — они разложатся по разделам сами.
+          </p>
+        </Card>
+      )}
 
       {unclassified.length > 0 && (
         <>

@@ -6,7 +6,8 @@ CADIAX и идентификаторы из протокола formetric зде�
 
 Данные:
   • formetric 4D Dynamic4D, 04.03.2025, условие «лев окк», 3 км/ч;
-  • CADIAX 4, 30.11.2023, движения «Открывание/закрывание» и «Протрузия/ретрузия».
+  • CADIAX 4, 30.11.2023, движения «Открывание/закрывание» и «Протрузия/ретрузия»;
+  • myoline, 04.06.2025, условие «нейтр» — печатный отчёт агонист/антагонист.
 
 Даты РАЗНЫЕ — это разные визиты, и §12 запрещает считать между ними разности
 без общего набора версий. Загружаются как две отдельные сессии.
@@ -14,6 +15,7 @@ CADIAX и идентификаторы из протокола formetric зде�
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +38,10 @@ from .settings import get_settings
 
 FIXTURES = ROOT / "tests" / "fixtures"
 PATIENT = "pref-clinic-real-0001"          # непроизводен от ПДн, соответствие у хоста
+#: Отчёт myoline снят у ДРУГОГО человека, чем формометрия: это отдельный
+#: непроизводный ref. Свести их в одного пациента значило бы объявить связь,
+#: которой в данных нет.
+PATIENT_MYO = "pref-clinic-real-0002"
 
 
 async def ingest() -> None:
@@ -93,12 +99,41 @@ async def ingest() -> None:
         fmt.status = "imported"
         await db.flush()
 
-        for session in (cdg, fmt):
+        # ── Визит 3: myoline, 04.06.2025, условие «нейтр» ────────────────────
+        # Печатный отчёт myoline лежит ЛОКАЛЬНО, а не в репозитории: в его
+        # текстовом слое напечатаны ФИО и дата рождения. Парсер их не сохраняет
+        # (Р-48), но сам файл — носитель ПДн, и место ему не в git (Р-9).
+        myo_file = Path(os.environ.get("DIERS_MYOLINE_REPORT", "")) if os.environ.get(
+            "DIERS_MYOLINE_REPORT") else FIXTURES / "нет-такого-файла"
+        myo = None
+        if myo_file.exists():
+            db.add(PatientRef(patient_ref=PATIENT_MYO,
+                              neutral_definition="habitual_occlusion"))
+            await db.flush()
+            myo = Session(
+                patient_ref=PATIENT_MYO, protocol_version=s.protocol_version,
+                started_at=datetime(2025, 6, 4, 17, 27, tzinfo=timezone.utc),
+                operator_ref="op-clinic", study_mode=False,
+                neutral_definition="habitual_occlusion", lld_mm=0.0,
+                platform_config_baseline={"device": "DIERS myoline"},
+                informed_consent_ref="ids-clinic-2025", status="prepared", **bundle.versions,
+            )
+            db.add(myo)
+            await db.flush()
+            myo.status = "plan_approved"
+            db.add(SessionPlan(session_id=myo.id, probes=[], approved_by="op-clinic"))
+            await _attach(db, myo, myo_file, "MAND_NEUTRAL_WITH_APPARATUS",
+                          ordinal=0, t=0.0)
+            myo.status = "imported"
+            await db.flush()
+
+        for session in (cdg, fmt) + ((myo,) if myo is not None else ()):
             full = await load_session(db, session.id)
             assert full is not None
             await materialize_param_values(db, full)
         await db.commit()
-        print(f"загружено: кондилография {cdg.id}, формометрия {fmt.id}")
+        print(f"загружено: кондилография {cdg.id}, формометрия {fmt.id}"
+              + (f", myoline {myo.id}" if myo is not None else ""))
         print("ВНИМАНИЕ: сессии разных визитов (2023 и 2025) — §12 запрещает "
               "вычислять между ними разности без общего набора версий")
 

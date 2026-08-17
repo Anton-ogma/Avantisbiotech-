@@ -34,6 +34,10 @@ def _jpeg(width: int, height: int) -> bytes:
 
 
 def build_pdf(images: list[tuple[str, int, int]]) -> bytes:
+    return build_pdf_with_text(PROTOCOL_TEXT, images)
+
+
+def build_pdf_with_text(text: str, images: list[tuple[str, int, int]]) -> bytes:
     """Однастраничный PDF: текстовый слой + перечисленные растры.
 
     Собирается вручную, без генератора: нужен точный контроль над тем, что
@@ -49,7 +53,7 @@ def build_pdf(images: list[tuple[str, int, int]]) -> bytes:
     # читает текстовый слой через pypdf, которому достаточно WinAnsi/UTF-16.
     lines = "".join(
         f"BT /F1 10 Tf 40 {760 - i * 14} Td <FEFF{s.encode('utf-16-be').hex().upper()}> Tj ET\n"
-        for i, s in enumerate(PROTOCOL_TEXT.splitlines())
+        for i, s in enumerate(text.splitlines())
     )
     content = lines.encode("latin-1")
     content_id = add(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content))

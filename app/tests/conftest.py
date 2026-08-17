@@ -15,8 +15,8 @@ def bundle():
     """Текущий набор конфигурации. Версия реестра совпадает с той, на которой
     работает приложение: тесты должны ловить расхождения, а не обходить их."""
     return load_bundle(
-        registry_version="2026.6", profile_version="2026.6",
-        thresholds_version="demo-2026.6", norms_version="empty",
+        registry_version="2026.7", profile_version="2026.7",
+        thresholds_version="demo-2026.7", norms_version="empty",
         protocol_version="2026.1",
     )
 

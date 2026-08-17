@@ -294,3 +294,94 @@ async def test_builtin_template_code_cannot_be_shadowed(client):
     })
     assert r.status_code == 409
     assert "занят" in r.json()["detail"]
+
+
+# ── Печатный отчёт myoline (Р-48) ────────────────────────────────────────────
+
+MYOLINE_TEXT = (
+    "Область норматив.знач.\n"
+    "ТУЛОВИЩЕ\n"
+    "Туловище| Разгибание / Сгибание\n"
+    "Разгибание 252 N / 78%\n"
+    "Сгибание 126 N / 100%\n"
+    "Туловище| Наклон налево / Наклон направо\n"
+    "Наклон налево 199 N / 72%\n"
+    "Наклон направо 276 N / 100%\n"
+    "ШЕЙНЫЙ ОТДЕЛ\n"
+    "Шейный отдел| Сгибание / Разгибание\n"
+    "Сгибание 78 N / 100%\n"
+    "Разгибание 73 N / 94%\n"
+    "последовательность Из 04.06.2025 | нейтр\n"
+    "Имя: Иванов Иван Иванович (* 01.01.1990)\n"
+    "Comparison Agonist/AntagonistВерсия ПО 3.24.1.7\n"
+)
+
+
+def _myoline_pdf() -> bytes:
+    """Синтетический лист с той же раскладкой. Настоящий отчёт в репозиторий
+    не кладётся: его текстовый слой несёт ФИО и дату рождения (Р-9)."""
+    from tests.test_figures import build_pdf_with_text
+
+    return build_pdf_with_text(MYOLINE_TEXT, [("Pic1", 129, 129), ("Bar", 300, 2)])
+
+
+def test_myoline_report_is_parsed_by_pairs():
+    """Значения привязываются по ИМЕНИ движения, а не по порядку строк.
+
+    Смена порядка в другой версии печати иначе переставила бы стороны местами,
+    и левое стало бы правым — ошибка, неотличимая от биологии.
+    """
+    from importers import parse_blob
+
+    parser, results = parse_blob(_myoline_pdf())
+    assert parser.format_id == "myoline-pdf-agonist-v1"
+    p = results[0].params
+    assert p["MYO_FORCE_TRUNK_EXT"] == 252.0
+    assert p["MYO_FORCE_TRUNK_FLEX"] == 126.0
+    assert p["MYO_FORCE_TRUNK_LAT_L"] == 199.0
+    assert p["MYO_FORCE_TRUNK_LAT_R"] == 276.0
+    assert p["MYO_FORCE_CERVICAL_FLEX"] == 78.0
+    assert p["MYO_FORCE_CERVICAL_EXT"] == 73.0
+    assert results[0].raw_row["condition_label"] == "нейтр"
+    assert results[0].device_sw_version == "3.24.1.7"
+
+
+def test_device_percent_is_kept_apart_from_platform_norms():
+    """«252 N / 78%» — процент норматива ПРИБОРА. Наши нормы пусты (Р-13), и
+    подставить чужую шкалу на их место значило бы считать «отклонение от нормы»
+    по величине, которую мы не проверяли."""
+    from importers import parse_blob
+
+    _, results = parse_blob(_myoline_pdf())
+    p = results[0].params
+    assert p["MYO_PCT_TRUNK_EXT"] == 78.0
+    assert "device_normative_percent_not_platform_norms" in results[0].quality_flags
+
+
+def test_agonist_ratio_is_computed_from_forces_not_percents():
+    """Отношение процентов измеряло бы шкалу прибора, а не пациента."""
+    from importers import parse_blob
+
+    _, results = parse_blob(_myoline_pdf())
+    p = results[0].params
+    assert p["MYO_RATIO_TRUNK_EXT_FLEX"] == round(252.0 / 126.0, 3)
+    assert p["MYO_ASYM_TRUNK_LAT"] == round(200 * (276 - 199) / (276 + 199), 2)
+
+
+def test_patient_name_never_enters_the_parse():
+    """Р-9: отчёт печатает ФИО и дату рождения — в модуль они не попадают,
+    в том числе в `unmapped` под видом неканонической строки."""
+    from importers import parse_blob
+
+    _, results = parse_blob(_myoline_pdf())
+    dump = repr(results[0].params) + repr(results[0].unmapped) + repr(results[0].raw_row)
+    assert "Иванов" not in dump
+    assert "1990" not in dump
+
+
+def test_formetric_parser_no_longer_grabs_every_pdf():
+    """Прежняя редакция забирала любой PDF, и отчёт myoline падал у неё вместо
+    того, чтобы достаться своему парсеру."""
+    from importers.formetric_pdf import FormetricPdfProtocolParser
+
+    assert FormetricPdfProtocolParser().detect(_myoline_pdf()) is False

@@ -125,14 +125,24 @@ class FormetricPdfProtocolParser:
     modality = "formetric_dynamic"
 
     def detect(self, blob: bytes) -> bool:
-        head = blob[:4096]
-        if head.startswith(b"%PDF"):
-            return True                      # разбор текста — в parse()
-        try:
-            text = blob.decode("utf-8")
-        except UnicodeDecodeError:
-            return False
-        return "Parameter_F4_" in text and "ДИАПАЗОН ДВИЖЕНИЯ" in text
+        """Признак — заголовок протокола В ТЕКСТЕ, а не расширение файла.
+
+        Прежняя редакция забирала ЛЮБОЙ PDF («начинается с %PDF — значит наш»),
+        и отчёт myoline, попав сюда первым, падал с «не протокол Parameter_F4_*»
+        вместо того, чтобы достаться своему парсеру. Формат опознаётся по тому,
+        что прибор напечатал, а не по обёртке.
+        """
+        if blob.startswith(b"%PDF"):
+            try:
+                text = self._text(blob)
+            except Exception:
+                return False
+        else:
+            try:
+                text = blob.decode("utf-8")
+            except UnicodeDecodeError:
+                return False
+        return "Parameter_F4_" in text
 
     def parse(self, blob: bytes) -> list[ParseResult]:
         """Разбирает ВСЕ разделы протокола, а не первый.

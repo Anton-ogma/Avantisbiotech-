@@ -22,7 +22,8 @@ probes:
     carryover_min: 0
     modes: [static]
     is_neutral: true
-    aliases: ["нейтраль", "нейтраль с аппаратом", "покой", "исходное"]
+    aliases: ["нейтраль", "нейтр", "нейтральное", "нейтраль с аппаратом",
+              "покой", "исходное"]
   - code: MAND_CLENCH
     label_ru: "Сжатие зубов"
     group: mandibular

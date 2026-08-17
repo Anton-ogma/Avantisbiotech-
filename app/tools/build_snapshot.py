@@ -53,6 +53,8 @@ async def build() -> None:
     async with db_mod.engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     await seed(int(os.environ.get("DIERS_SNAPSHOT_PATIENTS", "3")))
+    # DIERS_MYOLINE_REPORT — локальный путь к печатному отчёту myoline. В
+    # репозитории его нет: текстовый слой несёт ФИО и дату рождения (Р-9).
     await ingest_real()
 
     headers = {"X-Actor-Ref": "clinician-1", "X-Actor-Role": "clinician"}
