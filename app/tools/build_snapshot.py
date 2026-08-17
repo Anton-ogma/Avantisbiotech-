@@ -10,6 +10,10 @@
 
 Запуск:  PYTHONPATH=packages:. python -m tools.build_snapshot
 Результат: apps/web/public/snapshot.js
+
+DIERS_SNAPSHOT_PATIENTS — сколько синтетических пациентов положить в снимок
+(по умолчанию 3). Снимок — витрина, а не выгрузка базы: каждый пациент даёт
+около 200 КБ ответов, и шестеро утяжеляют страницу без нового смысла.
 """
 from __future__ import annotations
 
@@ -48,7 +52,7 @@ async def build() -> None:
 
     async with db_mod.engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    await seed()
+    await seed(int(os.environ.get("DIERS_SNAPSHOT_PATIENTS", "3")))
     await ingest_real()
 
     headers = {"X-Actor-Ref": "clinician-1", "X-Actor-Role": "clinician"}
@@ -66,7 +70,8 @@ async def build() -> None:
 
         for path in ("/platform", "/params", "/sessions",
                      "/emg/muscles", "/emg/montages",
-                     "/research/repeatability", "/research/progress"):
+                     "/research/repeatability", "/research/progress",
+                     "/research/protocol-analytics"):
             await grab(path)
 
         # Печатный протокол прибора — необязательный локальный файл. В

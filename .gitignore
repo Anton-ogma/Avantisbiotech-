@@ -13,3 +13,4 @@ app/apps/web/tsconfig.tsbuildinfo
 # несёт иллюстрации прибора: чужие материалы и содержимое конкретного
 # обследования. Воспроизводится скриптом, а не хранением.
 app/apps/web/public/snapshot.js
+app/apps/web/dist/
