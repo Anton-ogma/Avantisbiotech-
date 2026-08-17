@@ -27,7 +27,11 @@ const REGION_RU: Record<string, string> = {
 };
 
 export function Montage({ sessions }: { sessions: SessionOut[] }) {
-  const [selected, setSelected] = useState(sessions[0]?.id ?? "");
+  // Сессии приходят асинхронно: на первом рендере список ПУСТ, и значение по
+  // умолчанию, снятое с него один раз, так и остаётся "". Экран при этом
+  // выглядит рабочим — в select нарисован первый вариант, — а сохранение уходит
+  // по адресу `/sessions//montage` и молча не доезжает. Синхронизация ниже.
+  const [selected, setSelected] = useState("");
   const [muscles, setMuscles] = useState<MuscleInfo[]>([]);
   const [templates, setTemplates] = useState<MontageTemplate[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -48,6 +52,11 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
   const [captureTrial, setCaptureTrial] = useState("");
   const [captured, setCaptured] = useState<BleCaptureOut | null>(null);
   const offline = isSnapshot();
+
+  useEffect(() => {
+    if (sessions.length === 0) return;
+    if (!selected || !sessions.some((s) => s.id === selected)) setSelected(sessions[0].id);
+  }, [sessions, selected]);
 
   useEffect(() => {
     Promise.all([api.muscles(), api.montageTemplates()])
@@ -103,25 +112,55 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
     setSaved(null);
   }
 
+  /** Новый канал берёт первую СВОБОДНУЮ пару «мышца + сторона»: строка,
+   *  конфликтующая с уже набранной в момент своего появления, блокировала бы
+   *  сохранение сразу после нажатия «+ канал». */
   const addRow = () =>
-    setRows((r) => [...r, { label: `CH${r.length + 1}`, muscle: selectable[0]?.code ?? "", side: "L" }]);
+    setRows((r) => {
+      const taken = new Set(r.map((x) => `${x.muscle}|${x.side}`));
+      const free = selectable.flatMap((m) => (["L", "R"] as const).map((s) => ({ muscle: m.code, side: s })))
+        .find((c) => !taken.has(`${c.muscle}|${c.side}`));
+      const labels = new Set(r.map((x) => x.label.trim().toLowerCase()));
+      let n = r.length + 1;
+      while (labels.has(`ch${n}`)) n += 1;
+      return [...r, {
+        label: `CH${n}`,
+        muscle: free?.muscle ?? selectable[0]?.code ?? "",
+        side: free?.side ?? "L",
+      }];
+    });
   const patch = (i: number, p: Partial<Row>) =>
     setRows((r) => r.map((row, j) => (j === i ? { ...row, ...p } : row)));
   const drop = (i: number) => setRows((r) => r.filter((_, j) => j !== i));
 
   // Дубли ловятся здесь же: при разборе одна запись перетёрла бы другую, и
   // узнать об этом на экране настройки лучше, чем по пропавшей колонке.
-  const duplicates = useMemo(() => {
-    const seen = new Map<string, number>();
+  //
+  // Дублей ДВА вида, и оба кончаются потерей канала. Одинаковая метка провода —
+  // разбор не различит столбцы. Одинаковая пара «мышца + сторона» под разными
+  // метками — параметр EMG_RMS_<мышца>_<сторона> один, и вторая запись затрёт
+  // первую. Сервер отвергает оба (domain/montage.py), но узнавать об этом по
+  // ошибке сохранения — значит потерять уже набранный монтаж из виду.
+  const conflicts = useMemo(() => {
+    const byLabel = new Map<string, number>();
+    const bySite = new Map<string, number>();
     const bad = new Set<number>();
+    const sameLabel: string[] = [];
+    const sameSite: string[] = [];
     rows.forEach((r, i) => {
       const key = r.label.trim().toLowerCase().replace(/[-_\s]+/g, " ");
-      if (!key) return;
-      if (seen.has(key)) { bad.add(i); bad.add(seen.get(key)!); }
-      else seen.set(key, i);
+      if (key) {
+        if (byLabel.has(key)) { bad.add(i); bad.add(byLabel.get(key)!); sameLabel.push(r.label.trim()); }
+        else byLabel.set(key, i);
+      }
+      if (!r.muscle) return;
+      const site = `${r.muscle}|${r.side}`;
+      if (bySite.has(site)) { bad.add(i); bad.add(bySite.get(site)!); sameSite.push(site); }
+      else bySite.set(site, i);
     });
-    return bad;
+    return { rows: bad, sameLabel, sameSite };
   }, [rows]);
+  const duplicates = conflicts.rows;
 
   const oneSided = useMemo(() => {
     const sides = new Map<string, Set<string>>();
@@ -376,8 +415,19 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
 
         {duplicates.size > 0 && (
           <p className="tile-hint">
-            Одна метка назначена дважды: при разборе вторая запись перетёрла бы
-            первую. Исправьте метки — сохранение заблокировано.
+            {conflicts.sameLabel.length > 0 && (
+              <>Одна метка назначена дважды ({[...new Set(conflicts.sameLabel)].join(", ")}):
+                при разборе вторая запись перетёрла бы первую.{" "}</>
+            )}
+            {conflicts.sameSite.length > 0 && (
+              <>Одна и та же мышца со стороной записана дважды под разными метками
+                ({[...new Set(conflicts.sameSite)].map((s) => {
+                  const [m, side] = s.split("|");
+                  return `${ru(m)} ${side}`;
+                }).join(", ")}): показатель EMG_RMS у них один, и второй отвод
+                затёр бы первый.{" "}</>
+            )}
+            Сохранение заблокировано.
           </p>
         )}
         {oneSided.length > 0 && duplicates.size === 0 && (

@@ -1,24 +1,112 @@
 import { useEffect, useState } from "react";
-import { api, type Analysis } from "../lib/api";
+import { api, type Analysis, type FiguresOut, type Measurements } from "../lib/api";
 import { DeltaChart, ResponseChart } from "../components/DeltaChart";
+import { ReportByStructure } from "../components/ReportViews";
 import { Banner, Card, DeltaBadge, Empty, Segmented, Tile } from "../components/ui";
+
+/** Что показывать, когда анализ невозможен.
+ *
+ *  Анализ — величина СРАВНИТЕЛЬНАЯ: без пригодной нейтрали сравнивать не с чем,
+ *  и отказ здесь законен. Но измеренное-то есть: значения приборов и
+ *  иллюстрации отчёта DIERS от анализа не зависят вовсе. Отдавать вместо них
+ *  пустой экран с красной полосой — значит прятать загруженные данные за
+ *  отказом в вычислении, которого никто и не просил.
+ */
+function WithoutAnalysis({ sessionId, reason }: { sessionId: string; reason: string }) {
+  const [data, setData] = useState<Measurements | null>(null);
+  const [figures, setFigures] = useState<FiguresOut | null>(null);
+  const [trial, setTrial] = useState("");
+
+  useEffect(() => {
+    api.measurements(sessionId).then((d) => {
+      setData(d);
+      setTrial(d.trials[0]?.trial_id ?? "");
+    }).catch(() => setData(null));
+    api.figures(sessionId).then(setFigures).catch(() => setFigures(null));
+  }, [sessionId]);
+
+  const current = data?.trials.find((t) => t.trial_id === trial);
+
+  return (
+    <>
+      <Banner text={`Анализ не построен: ${reason}`} />
+      <Card>
+        <p className="tile-hint" style={{ margin: 0 }}>
+          Отклик считается ОТ НЕЙТРАЛИ этого же пациента, поэтому без пригодной
+          нейтральной пробы сравнивать не с чем — это отказ по существу, а не
+          сбой. Загруженное при этом никуда не делось: ниже приборные значения и
+          иллюстрации отчёта DIERS, они от анализа не зависят.
+        </p>
+      </Card>
+
+      {data && data.trials.length > 0 && (
+        <>
+          <div className="section-title">Пробы сессии</div>
+          <Card>
+            <Segmented value={trial}
+                       options={data.trials.map((t) => ({ value: t.trial_id, label: t.label_ru }))}
+                       onChange={setTrial} />
+          </Card>
+          {current && <ReportByStructure figures={figures?.figures ?? []} probe={current.probe_code} />}
+          {current && (
+            <>
+              <div className="section-title">Измеренные значения · {current.label_ru}</div>
+              <Card>
+                {current.params.length === 0 ? <Empty text="Значений нет" /> : (
+                  <div className="table-wrap">
+                    <table>
+                      <thead><tr><th>Параметр</th><th className="num">Значение</th></tr></thead>
+                      <tbody>
+                        {current.params.map((p) => (
+                          <tr key={p.code}>
+                            <td>{p.label_ru}<div className="mono">{p.code} · {p.unit}</div></td>
+                            <td className="num">{p.value.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            </>
+          )}
+        </>
+      )}
+    </>
+  );
+}
 
 export function SessionView({ sessionId, onBack }: { sessionId: string; onBack: () => void }) {
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [probe, setProbe] = useState<string>("");
   const [interim, setInterim] = useState<string[] | null>(null);
+  const [figures, setFigures] = useState<FiguresOut | null>(null);
 
   useEffect(() => {
     setAnalysis(null);
+    setError(null);
     api.analyze(sessionId).then((a) => {
       setAnalysis(a);
       const first = a.result.responses.find((r) => r.pass_no === 1);
       setProbe(first?.probe_code ?? "");
     }).catch((e) => setError(e.message));
+    // Иллюстрации отчёта DIERS относятся к пробе, а не к анализу, и грузятся
+    // отдельно: их отсутствие — свойство формата выгрузки, а не ошибка.
+    api.figures(sessionId).then(setFigures).catch(() => setFigures(null));
   }, [sessionId]);
 
-  if (error) return <><h1 className="title">Анализ</h1><Banner text={error} /></>;
+  if (error) {
+    return (
+      <>
+        <div className="row" style={{ marginBottom: 12 }}>
+          <button className="pill" onClick={onBack}>‹ Обзор</button>
+        </div>
+        <h1 className="title">Сессия без анализа</h1>
+        <WithoutAnalysis sessionId={sessionId} reason={error} />
+      </>
+    );
+  }
   if (!analysis) return <><h1 className="title">Анализ</h1><Empty text="Считаю…" /></>;
 
   const r = analysis.result;
@@ -193,8 +281,24 @@ export function SessionView({ sessionId, onBack }: { sessionId: string; onBack: 
               </table>
             </div>
           </>
-        ) : <Empty text="Проба не выбрана" />}
+        ) : (
+          <Empty text={r.responses.length === 0
+            ? "Откликов в сессии нет: сравнивать пробы не с чем — записана "
+              + "только нейтраль. Это не пустой результат, а отсутствие второго "
+              + "члена сравнения; измеренное показано ниже."
+            : "Проба не выбрана"} />
+        )}
       </Card>
+
+      {/* Иллюстрации прибора — под той же пробой, что и её числа. Отчёт DIERS
+          читают картинкой: держать её на отдельном экране значит заставлять
+          сверять позвоночник и таблицу по памяти.
+          Когда откликов нет (в сессии одна нейтраль), пробы для фильтра тоже
+          нет — тогда показываются все листы сессии: иллюстрации существуют
+          независимо от того, удалось ли построить сравнение. */}
+      {(figures?.figures.length ?? 0) > 0 && (
+        <ReportByStructure figures={figures!.figures} probe={selected?.probe_code} />
+      )}
 
       <div className="section-title">Подтверждающий повтор</div>
       <Card>

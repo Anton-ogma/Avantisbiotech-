@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from contracts.schemas import (
@@ -54,11 +55,32 @@ async def analyze_session(
     if existing is not None:
         return _analysis_out(existing)
 
+    # Проверка выше не атомарна: два одновременных запроса на анализ (два окна,
+    # повтор после таймаута, автопереанализ рядом с ручным) оба увидят «записи
+    # нет» и оба попробуют вставить. Уникальность (session_id, input_hash) в этот
+    # момент отрабатывает как задумано, но необработанная IntegrityError выходит
+    # наружу пятисоткой — притом что произошло ровно то, чего мы и добивались:
+    # анализ с этим входом уже сохранён. Гонка здесь — штатное течение событий,
+    # а не сбой, и отвечать на неё надо сохранённой записью.
     record = Analysis(
         session_id=session.id, input_hash=result.input_hash, index_kind=result.index_kind,
         result=result.to_dict(), **result.versions,
     )
-    db.add(record)
+    try:
+        async with db.begin_nested():
+            db.add(record)
+            await db.flush()
+    except IntegrityError:
+        existing = (await db.execute(
+            select(Analysis).where(
+                Analysis.session_id == session.id, Analysis.input_hash == result.input_hash
+            )
+        )).scalar_one_or_none()
+        if existing is None:
+            # Значит нарушено не то ограничение — молчать нельзя.
+            raise
+        return _analysis_out(existing)
+
     session.low_confidence = result.low_confidence
     if session.status == "shortlist_confirmed":
         session.status = "analyzed"

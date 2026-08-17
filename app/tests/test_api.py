@@ -1,6 +1,7 @@
 """Сквозные проверки приёмки (§16 ТЗ): регуляторные предохранители, слепота,
 идемпотентность, детерминизм, сопоставимость визитов."""
 import asyncio
+import json
 import os
 import tempfile
 
@@ -143,3 +144,77 @@ async def test_external_llm_endpoint_rejected():
     with pytest.raises(Exception) as e:
         Settings(llm_endpoint="https://api.openai.com/v1")
     assert "трансграничная" in str(e.value)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_analyze_returns_stored_analysis_not_500(client):
+    """Р-34 под гонкой: одновременный анализ отдаёт сохранённый, а не пятисотку.
+
+    Проверка «записи ещё нет» и вставка не атомарны, и окно между ними реально:
+    два окна врача, повтор после таймаута, автопереанализ рядом с ручным. В это
+    окно чужой запрос успевает сохранить анализ С ТЕМ ЖЕ input_hash;
+    уникальность (session_id, input_hash) срабатывает как задумано, и вопрос
+    лишь в том, что увидит клиент — сохранённый анализ или ошибку сервера.
+
+    Гонка воспроизводится ПРИЦЕЛЬНО: конкурирующая строка пишется отдельным
+    соединением ровно между выборкой и вставкой. Вариант «запустим два запроса
+    и понадеемся» такой дефект пропускает — он и пропускал, пока сюда не
+    поставили точную врезку.
+    """
+    import os
+    import sqlite3
+    from uuid import uuid4
+
+    from apps.api.routers import analyses as mod
+    from apps.api.seed import seed
+    await seed(1)
+
+    sid = (await client.get("/sessions", headers=CLIN)).json()[0]["id"]
+    first = await client.post(f"/sessions/{sid}/analyze", json={}, headers=CLIN)
+    assert first.status_code == 200, first.text
+    stored = first.json()
+
+    path = os.environ["DIERS_DATABASE_URL"].split("///", 1)[1]
+    with sqlite3.connect(path) as conn:                     # чистим сохранённое,
+        conn.execute("DELETE FROM analyses WHERE session_id = ?", (sid,))  # чтобы
+                                                            # запрос пошёл по ветке вставки
+    real_run = mod.run_analysis
+
+    class Racing:
+        """Обёртка результата: конкурирующая запись делается в `to_dict()`.
+
+        Это единственный вызов между выборкой «записи нет» и вставкой — то
+        самое окно. Подменять сам `Analysis` нельзя: его же имя стоит в
+        `select(Analysis)`, и подмена сломала бы выборку вместо гонки.
+        """
+
+        def __init__(self, inner):
+            self._inner = inner
+
+        def __getattr__(self, name):
+            return getattr(self._inner, name)
+
+        def to_dict(self):
+            payload = self._inner.to_dict()
+            with sqlite3.connect(path) as conn:
+                conn.execute(
+                    "INSERT INTO analyses (id, session_id, norms_version,"
+                    " thresholds_version, rules_version, profile_version,"
+                    " registry_version, input_hash, index_kind, result, created_at)"
+                    " VALUES (?,?,?,?,?,?,?,?,?,?,datetime('now'))",
+                    (str(uuid4()), sid, *[self._inner.versions[k] for k in (
+                        "norms_version", "thresholds_version", "rules_version",
+                        "profile_version", "registry_version")],
+                     self._inner.input_hash, self._inner.index_kind,
+                     json.dumps(payload, ensure_ascii=False)),
+                )
+            return payload
+
+    mod.run_analysis = lambda *a, **kw: Racing(real_run(*a, **kw))   # type: ignore[assignment]
+    try:
+        second = await client.post(f"/sessions/{sid}/analyze", json={}, headers=CLIN)
+    finally:
+        mod.run_analysis = real_run                                 # type: ignore[assignment]
+
+    assert second.status_code == 200, second.text
+    assert second.json()["input_hash"] == stored["input_hash"]

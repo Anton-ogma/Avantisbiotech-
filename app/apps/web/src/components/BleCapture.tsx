@@ -13,7 +13,7 @@
  *  и на iOS его нет и не планируется: там остаётся файл выгрузки. Экран говорит
  *  это прямо, а не прячет неработающую кнопку.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { BleProfile } from "../lib/api";
 import { Banner, Card, Empty, Tile } from "../components/ui";
 
@@ -67,13 +67,22 @@ export function BleCapture({ profiles, onCapture, disabled }: {
   }) => Promise<void>;
   disabled?: boolean;
 }) {
-  const [profile, setProfile] = useState(profiles[0]?.code ?? "");
+  // Профили датчиков грузятся запросом и на первом рендере пусты — значение по
+  // умолчанию, снятое с пустого списка, осталось бы "" навсегда: в списке
+  // нарисован первый профиль, а запись не начинается вовсе (тот же дефект, что
+  // и с выбором сессии).
+  const [profile, setProfile] = useState("");
   const [state, setState] = useState<"idle" | "connecting" | "recording" | "sending">("idle");
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<string | null>(null);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const available = bluetoothAvailable();
   const spec = profiles.find((p) => p.code === profile);
+
+  useEffect(() => {
+    if (profiles.length === 0) return;
+    if (!profile || !profiles.some((p) => p.code === profile)) setProfile(profiles[0].code);
+  }, [profiles, profile]);
 
   async function capture() {
     const p = profiles.find((x) => x.code === profile);

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, isSnapshot, type IngestReport, type SessionOut } from "../lib/api";
 import { Banner, Card, Empty, Tile } from "../components/ui";
 
@@ -16,17 +16,34 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export function Upload({ sessions, onDone }: { sessions: SessionOut[]; onDone: () => void }) {
-  const [selected, setSelected] = useState(sessions[0]?.id ?? "");
+  // Список сессий приходит асинхронно, и на первом рендере он ПУСТ. Значение по
+  // умолчанию, взятое один раз при монтировании, так и оставалось пустым: выбор
+  // в select выглядел сделанным, а состояние было "" — загрузка молча не
+  // отправляла запрос вовсе. Синхронизация обязательна, а не косметика.
+  const [selected, setSelected] = useState("");
   const [report, setReport] = useState<IngestReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const offline = isSnapshot();
+
+  useEffect(() => {
+    if (sessions.length === 0) return;
+    // Сессия могла исчезнуть из списка (фильтр, перезагрузка) — тогда выбор
+    // сбрасывается на первую доступную, а не остаётся указывать в пустоту.
+    if (!selected || !sessions.some((s) => s.id === selected)) setSelected(sessions[0].id);
+  }, [sessions, selected]);
   const input = useRef<HTMLInputElement>(null);
 
   async function send(files: FileList | File[]) {
     const list = Array.from(files);
-    if (!list.length || !selected) return;
+    if (!list.length) return;
+    if (!selected) {
+      // Молчаливый выход отсюда и был дефектом: пользователь видел выбранную
+      // сессию и нажимал загрузку, а не происходило ничего.
+      setError("Сессия не выбрана: загружать некуда. Выберите сессию в списке выше.");
+      return;
+    }
     setBusy(true); setError(null);
     try {
       setReport(await api.autoIngest(selected, list));
