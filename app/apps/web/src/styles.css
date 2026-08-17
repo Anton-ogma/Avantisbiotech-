@@ -437,3 +437,16 @@ button.pill[aria-pressed="true"] {
 
 /* Строка монтажа с конфликтом меток: сохранение заблокировано, и видно почему. */
 tr.row-bad td { background: rgba(214, 69, 95, 0.1); }
+
+/* Вертикальная раскладка схем: колонка на пробу, виды сверху вниз (Р-45).
+   Прокрутка своя, страница вбок не едет — правило действует на всех раскладках. */
+.fig-columns { display: flex; gap: 16px; overflow-x: auto; padding-bottom: 6px; align-items: flex-start; }
+.fig-column { flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.fig-column .fig { width: 210px; }
+.fig-column-head {
+  position: sticky; top: 0; z-index: 1; padding: 7px 12px; border-radius: 12px;
+  background: linear-gradient(140deg, var(--accent), var(--accent-2)); color: #fff;
+  font-size: 12.5px; font-weight: 640; text-align: center;
+}
+.fig-column-view { font-size: 11px; color: var(--text-3); padding-left: 4px; }
+@media (max-width: 700px) { .fig-column .fig { width: 176px; } }

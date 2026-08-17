@@ -11,8 +11,10 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   api, isSnapshot,
-  type MontageOut, type MontageTemplate, type MuscleInfo, type SessionOut,
+  type BleCaptureOut, type BleProfile, type MontageOut, type MontageTemplate,
+  type MuscleInfo, type SessionOut,
 } from "../lib/api";
+import { BleCapture } from "../components/BleCapture";
 import { Banner, Card, Empty, Tile } from "../components/ui";
 
 type Row = { label: string; muscle: string; side: "L" | "R" };
@@ -34,12 +36,25 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
   const [current, setCurrent] = useState<MontageOut | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  // Свой шаблон: набор «мышца + стороны», а не готовых каналов. Метки провода
+  // на этом уровне не задаются — они у каждой записи свои.
+  const [building, setBuilding] = useState(false);
+  const [tplCode, setTplCode] = useState("");
+  const [tplLabel, setTplLabel] = useState("");
+  const [tplPurpose, setTplPurpose] = useState("");
+  const [tplGroups, setTplGroups] = useState<{ muscle: string; side: string }[]>([]);
+  const [profiles, setProfiles] = useState<BleProfile[]>([]);
+  const [trials, setTrials] = useState<{ id: string; label: string }[]>([]);
+  const [captureTrial, setCaptureTrial] = useState("");
+  const [captured, setCaptured] = useState<BleCaptureOut | null>(null);
   const offline = isSnapshot();
 
   useEffect(() => {
     Promise.all([api.muscles(), api.montageTemplates()])
       .then(([m, t]) => { setMuscles(m.muscles); setTemplates(t.montages); })
       .catch((e) => setError(e.message));
+    // Профили датчиков — конфигурация; отсутствие их не ломает экран монтажа.
+    api.bleProfiles().then((p) => setProfiles(p.profiles)).catch(() => setProfiles([]));
   }, []);
 
   useEffect(() => {
@@ -55,6 +70,14 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
         setNote(m.montage?.note ?? "");
       })
       .catch((e) => setError(e.message));
+    setCaptured(null);
+    api.measurements(selected)
+      .then((m) => {
+        const list = m.trials.map((x) => ({ id: x.trial_id, label: x.label_ru }));
+        setTrials(list);
+        setCaptureTrial(list[0]?.id ?? "");
+      })
+      .catch(() => setTrials([]));
   }, [selected]);
 
   /** Поверхностно недоступные мышцы показываются, но выбрать их нельзя:
@@ -123,6 +146,46 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
 
   const ru = (code: string) => muscles.find((m) => m.code === code)?.label_ru ?? code;
 
+  const inTemplate = (code: string) => tplGroups.some((g) => g.muscle === code);
+  const toggleMuscle = (code: string) =>
+    setTplGroups((g) => inTemplate(code)
+      ? g.filter((x) => x.muscle !== code)
+      : [...g, { muscle: code, side: "both" }]);
+  const setSide = (code: string, side: string) =>
+    setTplGroups((g) => g.map((x) => (x.muscle === code ? { ...x, side } : x)));
+  const addRegion = (region: string) =>
+    setTplGroups((g) => {
+      const add = selectable.filter((m) => m.region === region && !g.some((x) => x.muscle === m.code));
+      return [...g, ...add.map((m) => ({ muscle: m.code, side: "both" }))];
+    });
+
+  async function saveTemplate() {
+    setError(null); setSaved(null);
+    try {
+      const out = await api.saveTemplate({
+        code: tplCode.trim(), label_ru: tplLabel.trim(),
+        purpose: tplPurpose.trim(), channels: tplGroups,
+      });
+      setTemplates((prev) => [...prev.filter((x) => x.code !== out.template.code), out.template]);
+      setSaved(`Шаблон «${out.template.label_ru}» сохранён: ${out.template.channel_count} каналов`
+        + (out.warnings?.length ? ` · ${out.warnings.join("; ")}` : ""));
+      setBuilding(false); setTplGroups([]); setTplCode(""); setTplLabel("");
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function archive(code: string) {
+    setError(null);
+    try {
+      await api.archiveTemplate(code);
+      setTemplates((prev) => prev.filter((x) => x.code !== code));
+      setSaved(`Шаблон ${code} убран из списка; записанные по нему сессии не тронуты`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   return (
     <>
       <h1 className="title">Монтаж ЭМГ</h1>
@@ -156,19 +219,97 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
         </div>
       </Card>
 
-      <div className="section-title">Шаблоны групп мышц</div>
+      <div className="row" style={{ marginTop: 26, marginBottom: 12 }}>
+        <div className="section-title" style={{ margin: 0 }}>Шаблоны групп мышц</div>
+        <span className="spacer" />
+        <button className="pill" aria-pressed={building} onClick={() => setBuilding((b) => !b)}>
+          {building ? "Свернуть" : "+ свой шаблон"}
+        </button>
+      </div>
       <div className="grid cols-3">
         {templates.map((t) => (
-          <button key={t.code} className="list-row" style={{ textAlign: "left" }}
-                  aria-pressed={template === t.code} onClick={() => applyTemplate(t.code)}>
-            <div>
+          <div key={t.code} className="list-row" style={{ textAlign: "left" }}>
+            <button style={{ all: "unset", cursor: "pointer", flex: 1 }}
+                    aria-pressed={template === t.code} onClick={() => applyTemplate(t.code)}>
               <strong>{t.label_ru}</strong>
+              {t.builtin === false && <span className="badge accent" style={{ marginLeft: 8 }}>свой</span>}
               <div className="tile-hint">{t.purpose}</div>
-              <div className="mono">{t.channel_count} каналов</div>
-            </div>
-          </button>
+              <div className="mono">{t.channel_count} каналов · {t.code}</div>
+            </button>
+            {t.builtin === false && (
+              <button className="pill" disabled={offline} onClick={() => archive(t.code)}
+                      aria-label={`убрать шаблон ${t.label_ru}`}>убрать</button>
+            )}
+          </div>
         ))}
       </div>
+
+      {building && (
+        <Card>
+          <div className="tile-label" style={{ marginBottom: 10 }}>
+            Свой шаблон · выбрано мышц: {tplGroups.length}
+          </div>
+          <div className="row" style={{ marginBottom: 12 }}>
+            <input className="pill" style={{ width: 180 }} value={tplCode}
+                   placeholder="код: MY_PANEL"
+                   onChange={(e) => setTplCode(e.target.value.toUpperCase())} />
+            <input className="pill" style={{ width: 240 }} value={tplLabel}
+                   placeholder="название по-русски"
+                   onChange={(e) => setTplLabel(e.target.value)} />
+            <input className="pill" style={{ flex: 1, minWidth: 200 }} value={tplPurpose}
+                   placeholder="для какой пробы"
+                   onChange={(e) => setTplPurpose(e.target.value)} />
+          </div>
+
+          {byRegion.map(([region, list]) => (
+            <div key={region} style={{ marginBottom: 12 }}>
+              <div className="row">
+                <span className="tile-label">{REGION_RU[region] ?? region}</span>
+                <button className="pill" onClick={() => addRegion(region)}>
+                  + вся группа
+                </button>
+              </div>
+              <div className="row" style={{ marginTop: 6 }}>
+                {list.map((m) => {
+                  const on = inTemplate(m.code);
+                  const side = tplGroups.find((g) => g.muscle === m.code)?.side ?? "both";
+                  return (
+                    <span key={m.code} className="row" style={{ gap: 4 }}>
+                      <button className="pill" aria-pressed={on}
+                              onClick={() => toggleMuscle(m.code)} title={m.latin}>
+                        {on ? "− " : "+ "}{m.label_ru}
+                      </button>
+                      {on && (
+                        <select className="pill" value={side}
+                                aria-label={`стороны для ${m.label_ru}`}
+                                onChange={(e) => setSide(m.code, e.target.value)}>
+                          <option value="both">обе</option>
+                          <option value="L">только слева</option>
+                          <option value="R">только справа</option>
+                        </select>
+                      )}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div className="row" style={{ marginTop: 8 }}>
+            <span className="tile-hint" style={{ flex: 1 }}>
+              «Обе» даёт два отвода и асимметрию. Односторонний выбор законен —
+              так пишут, когда интересует сторона поражения, — но асимметрии по
+              такой мышце не будет.
+            </span>
+            <button className="pill primary" disabled={
+              offline || tplGroups.length === 0 || tplCode.trim().length < 2
+              || tplLabel.trim().length === 0
+            } onClick={saveTemplate}>
+              Сохранить шаблон
+            </button>
+          </div>
+        </Card>
+      )}
 
       <div className="section-title">Каналы записи</div>
       <Card>
@@ -256,6 +397,80 @@ export function Montage({ sessions }: { sessions: SessionOut[] }) {
           <Tile label="Асимметрий" value={new Set(rows.map((r) => r.muscle)).size - oneSided.length}
                 hint="считаются только для мышц с обеими сторонами" />
         </div>
+      )}
+
+      {profiles.length > 0 && (
+        <>
+          <div className="section-title">Запись с беспроводных датчиков</div>
+          <div className="row" style={{ marginBottom: 10 }}>
+            <span className="tile-label">Проба</span>
+            <select className="pill" style={{ minWidth: 260 }} value={captureTrial}
+                    onChange={(e) => setCaptureTrial(e.target.value)}>
+              {trials.map((tr) => <option key={tr.id} value={tr.id}>{tr.label}</option>)}
+            </select>
+            {rows.length === 0 && (
+              <span className="badge">монтаж не задан — каналы уйдут без прописи</span>
+            )}
+          </div>
+          <BleCapture
+            profiles={profiles}
+            disabled={offline || !captureTrial}
+            onCapture={async (payload) => {
+              const out = await api.bleCapture(selected, { ...payload, trial_id: captureTrial });
+              setCaptured(out);
+            }}
+          />
+          {captured && (
+            <Card>
+              <div className="row">
+                <span className={`badge ${captured.status === "captured" ? "good" : ""}`}>
+                  {captured.status === "captured" ? "записано" : captured.status}
+                </span>
+                {captured.fs_actual != null && (
+                  <span className="badge">
+                    частота факт. {captured.fs_actual} Гц из {captured.fs_declared}
+                  </span>
+                )}
+                {captured.duration_sec != null && (
+                  <span className="badge">{captured.duration_sec} с</span>
+                )}
+              </div>
+              {(captured.channels ?? []).length > 0 && (
+                <div className="table-wrap" style={{ marginTop: 12 }}>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Канал</th><th className="num">RMS, мкВ</th>
+                        <th className="num">пик</th><th className="num">SNR, дБ</th>
+                        <th className="num">выброшено, дБ</th><th>Флаги</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(captured.channels ?? []).map((c) => (
+                        <tr key={c.label}>
+                          <td>{c.label}</td>
+                          <td className="num">{c.rms_uv}</td>
+                          <td className="num">{c.peak_uv}</td>
+                          <td className="num">{c.snr_db ?? "—"}</td>
+                          <td className="num">{c.mains_share_db ?? "—"}</td>
+                          <td className="tile-hint">{c.flags.join(", ") || "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {(captured.unmapped ?? []).length > 0 && (
+                <p className="tile-hint">
+                  Без прописи в монтаже, в параметры не вошли:{" "}
+                  {(captured.unmapped ?? []).join(", ")}. Допишите канал выше или
+                  решите, что он лишний — угадывать мышцу платформа не будет.
+                </p>
+              )}
+              {captured.note && <p className="tile-hint">{captured.note}</p>}
+            </Card>
+          )}
+        </>
       )}
 
       {deep.length > 0 && (

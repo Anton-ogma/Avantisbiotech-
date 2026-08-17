@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type FiguresOut, type MeasuredParam, type Measurements,
          type SessionOut } from "../lib/api";
-import { AnatomySet, type Values } from "../components/Anatomy";
+import { AnatomyCompare, type Orientation } from "../components/Anatomy";
 import { ProtocolFigures } from "../components/ProtocolFigures";
 import { Banner, Card, Empty, Segmented, Tile } from "../components/ui";
 
@@ -37,6 +37,10 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
   const [trial, setTrial] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [figures, setFigures] = useState<FiguresOut | null>(null);
+  // Несколько проб сразу и выбор раскладки: одна проба отвечает на «что в этой
+  // пробе», несколько — на «чем пробы отличаются». Это разные вопросы.
+  const [picked, setPicked] = useState<string[]>([]);
+  const [orientation, setOrientation] = useState<Orientation>("rows");
 
   useEffect(() => {
     if (!selected && sessions.length) setSelected(sessions[0].id);
@@ -48,6 +52,7 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
     api.measurements(selected).then((d) => {
       setData(d);
       setTrial(d.trials[0]?.trial_id ?? "");
+      setPicked(d.trials.slice(0, 2).map((x) => x.trial_id));
     }).catch((e) => setError(e.message));
     // Иллюстраций может не быть вовсе — это не ошибка, а свойство формата.
     api.figures(selected).then(setFigures).catch(() => setFigures(null));
@@ -55,7 +60,6 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
 
   const current = data?.trials.find((t) => t.trial_id === trial);
   const { paired, single } = current ? pairs(current.params) : { paired: [], single: [] };
-  const values: Values = Object.fromEntries((current?.params ?? []).map((p) => [p.code, p.value]));
   const shownFigures = (figures?.figures ?? []).filter((f) => f.probe_code === current?.probe_code);
 
   return (
@@ -97,12 +101,54 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
             ))}
           </Card>
 
-          {current && (
+          {data.trials.length > 0 && (
             <>
-              <div className="section-title">Схемы по измерениям</div>
+              <div className="row" style={{ marginTop: 26, marginBottom: 12 }}>
+                <div className="section-title" style={{ margin: 0 }}>Схемы по измерениям</div>
+                <span className="spacer" />
+                <Segmented value={orientation} onChange={setOrientation} options={[
+                  { value: "rows", label: "Горизонтально" },
+                  { value: "columns", label: "Вертикально" },
+                ]} />
+              </div>
               <Card>
-                <AnatomySet values={values} />
+                <div className="tile-label" style={{ marginBottom: 10 }}>
+                  Пробы в просмотре · выбрано {picked.length}
+                </div>
+                <div className="row">
+                  {data.trials.map((tr) => {
+                    const on = picked.includes(tr.trial_id);
+                    return (
+                      <button key={tr.trial_id} className="pill" aria-pressed={on}
+                              onClick={() => setPicked((prev) => on
+                                ? prev.filter((x) => x !== tr.trial_id)
+                                : [...prev, tr.trial_id])}>
+                        {on ? "− " : "+ "}{tr.label_ru}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="tile-hint">
+                  {orientation === "rows"
+                    ? "Строка — вид, столбцы — пробы: так сравнивают один показатель между пробами."
+                    : "Колонка — проба, виды сверху вниз: так читают пробу целиком."}
+                  {" "}Число проб не ограничено, ряд прокручивается.
+                </p>
+                {picked.length === 0 && (
+                  <Empty text="Добавьте пробы, чтобы построить схемы." />
+                )}
               </Card>
+
+              {picked.length > 0 && (
+                <AnatomyCompare orientation={orientation} probes={picked.map((id) => {
+                  const tr = data.trials.find((x) => x.trial_id === id);
+                  return {
+                    code: id,
+                    label: (tr?.label_ru ?? id).replace(/^(MAND|PODAL|CTRL|CDG)[_\s]/, ""),
+                    values: Object.fromEntries((tr?.params ?? []).map((pp) => [pp.code, pp.value])),
+                  };
+                })} />
+              )}
             </>
           )}
 

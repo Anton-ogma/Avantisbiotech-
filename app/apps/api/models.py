@@ -138,6 +138,26 @@ class SessionMontageRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class MontageTemplateRow(Base):
+    """Свой шаблон монтажа, собранный оператором (Р-45).
+
+    Отдельно от `config/emg/montages.yaml`: встроенные шаблоны — конфигурация
+    платформы, свои — данные клиники. Смешать их значило бы либо потерять
+    пользовательские при обновлении, либо позволить правку поставляемых, после
+    которой уже загруженные сессии ссылались бы на изменившийся шаблон.
+    """
+    __tablename__ = "montage_templates"
+    id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
+    code: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    label_ru: Mapped[str] = mapped_column(String(128))
+    purpose: Mapped[str] = mapped_column(Text, default="")
+    #: [{"muscle": "MASSETER", "side": "both"}, …]
+    channels: Mapped[list] = mapped_column(JSONB_, default=list)
+    created_by: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class SessionPlan(Base):
     """Р-29: план утверждается ДО первой пробы. Валидатор, срабатывающий после
     ухода пациента, ничего не предотвращает."""

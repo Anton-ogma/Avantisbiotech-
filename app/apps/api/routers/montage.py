@@ -14,10 +14,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.config import load_montages, load_muscles
-from domain.montage import MontageError, build_montage, from_template
+from domain.montage import (MontageError, build_montage, from_template,
+                            montage_from_channels)
 
 from ..db import get_db
-from ..models import SessionMontageRow
+from ..models import MontageTemplateRow, SessionMontageRow
 from ..security import Principal, audit, current_principal, require
 from ..services.session_service import load_session
 
@@ -56,7 +57,10 @@ async def muscles(principal: Principal = Depends(current_principal)) -> dict:
 
 
 @router.get("/emg/montages")
-async def montages(principal: Principal = Depends(current_principal)) -> dict:
+async def montages(
+    db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(current_principal),
+) -> dict:
     lib = load_montages()
     catalog = load_muscles()
     out = []
@@ -72,9 +76,123 @@ async def montages(principal: Principal = Depends(current_principal)) -> dict:
                     "side": side,
                 })
         out.append({"code": m.code, "label_ru": m.label_ru, "purpose": m.purpose,
-                    "channels": channels, "channel_count": len(channels)})
+                    "channels": channels, "channel_count": len(channels),
+                    "builtin": True, "groups": _groups(m.channels, catalog)})
+
+    rows = (await db.execute(
+        select(MontageTemplateRow)
+        .where(MontageTemplateRow.archived.is_(False))
+        .order_by(MontageTemplateRow.created_at)
+    )).scalars().all()
+    out.extend(_template_out(r) for r in rows)
+
     return {"version": lib.version, "montages": out,
-            "note": "Шаблон — заготовка: оператор правит метки и состав под свою запись."}
+            "note": ("Шаблон — заготовка: оператор правит метки и состав под свою "
+                     "запись. builtin=false — свой шаблон клиники.")}
+
+
+def _groups(channels, catalog) -> list[dict]:
+    """Состав шаблона в виде «мышца + стороны» — то, из чего его собирали."""
+    return [{"muscle": ch.muscle, "side": ch.side,
+             "muscle_label_ru": (m.label_ru if (m := catalog.get(ch.muscle)) else ch.muscle),
+             "region": m.region if m else "unknown"}
+            for ch in channels]
+
+
+def _template_out(row: MontageTemplateRow) -> dict:
+    catalog = load_muscles()
+    channels = []
+    for ch in (row.channels or []):
+        muscle = catalog.get(ch["muscle"])
+        for side in (("L", "R") if ch.get("side", "both") == "both" else (ch["side"].upper(),)):
+            channels.append({
+                "label": f"{ch['muscle']}_{side}", "muscle": ch["muscle"],
+                "muscle_label_ru": muscle.label_ru if muscle else ch["muscle"], "side": side,
+            })
+    return {
+        "code": row.code, "label_ru": row.label_ru, "purpose": row.purpose,
+        "channels": channels, "channel_count": len(channels), "builtin": False,
+        "created_by": row.created_by,
+        "groups": [
+            {"muscle": ch["muscle"], "side": ch.get("side", "both"),
+             "muscle_label_ru": (m.label_ru if (m := catalog.get(ch["muscle"])) else ch["muscle"]),
+             "region": m.region if m else "unknown"}
+            for ch in (row.channels or [])
+        ],
+    }
+
+
+class GroupChannelIn(BaseModel):
+    muscle: str = Field(min_length=1, max_length=64)
+    #: both — два отвода; L или R — односторонний, законен и осознан.
+    side: str = Field(default="both", pattern="^(both|[LlRr])$")
+
+
+class TemplateIn(BaseModel):
+    code: str = Field(min_length=2, max_length=64, pattern=r"^[A-Za-z0-9_\-]+$")
+    label_ru: str = Field(min_length=1, max_length=128)
+    purpose: str = ""
+    channels: list[GroupChannelIn] = Field(min_length=1)
+
+
+@router.post("/emg/montages", status_code=status.HTTP_201_CREATED)
+async def create_template(
+    payload: TemplateIn, db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require("operator", "clinician", "methodologist", "admin")),
+) -> dict:
+    """Свой шаблон монтажа: набор мышц под собственный протокол (Р-45).
+
+    Проверяется тем же кодом, что и поставляемые шаблоны: недоступная
+    поверхностно мышца и повтор канала отклоняются здесь, а не всплывают
+    пустой колонкой через месяц.
+    """
+    if load_montages().get(payload.code) is not None:
+        # Перекрытие поставляемого шаблона запрещено: уже загруженные сессии
+        # ссылаются на его код, и подмена состава задним числом объявила бы их
+        # записанными не тем.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"код {payload.code} занят поставляемым шаблоном — выберите другой")
+    existing = (await db.execute(
+        select(MontageTemplateRow).where(MontageTemplateRow.code == payload.code)
+    )).scalar_one_or_none()
+    if existing is not None and not existing.archived:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"шаблон {payload.code} уже есть")
+
+    try:
+        montage = montage_from_channels(
+            [c.model_dump() for c in payload.channels],
+            code=payload.code, label_ru=payload.label_ru)
+    except MontageError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e)) from e
+
+    row = existing or MontageTemplateRow(code=payload.code, created_by=principal.actor_ref)
+    row.label_ru, row.purpose, row.archived = payload.label_ru, payload.purpose, False
+    row.channels = [c.model_dump() for c in payload.channels]
+    if existing is None:
+        db.add(row)
+    await db.flush()
+    await audit(db, principal, "montage_template.saved", "montage_template", row.code,
+                payload={"channels": len(montage.channels)})
+    return {"template": _template_out(row), "warnings": list(montage.warnings)}
+
+
+@router.delete("/emg/montages/{code}")
+async def archive_template(
+    code: str, db: AsyncSession = Depends(get_db),
+    principal: Principal = Depends(require("operator", "clinician", "methodologist", "admin")),
+) -> dict:
+    """Шаблон архивируется, а не удаляется: на него ссылаются прошлые сессии."""
+    row = (await db.execute(
+        select(MontageTemplateRow).where(MontageTemplateRow.code == code)
+    )).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"шаблона {code} нет")
+    row.archived = True
+    await db.flush()
+    await audit(db, principal, "montage_template.archived", "montage_template", code)
+    return {"code": code, "archived": True,
+            "note": "шаблон скрыт из списка; сессии, записанные по нему, не тронуты"}
 
 
 @router.get("/sessions/{session_id}/montage")
@@ -108,7 +226,8 @@ async def set_montage(
                 template=payload.template, note=payload.note,
             )
         elif payload.template:
-            montage = from_template(payload.template)
+            montage = from_template(payload.template) if load_montages().get(payload.template) \
+                else await _from_saved_template(db, payload.template)
         else:
             raise MontageError("нужен либо шаблон, либо список каналов")
     except MontageError as e:
@@ -126,6 +245,15 @@ async def set_montage(
                 payload={"template": montage.template, "channels": len(montage.channels)})
     return {"session_id": str(session.id), "montage": _out(row),
             "warnings": list(montage.warnings)}
+
+
+async def _from_saved_template(db: AsyncSession, code: str):
+    row = (await db.execute(
+        select(MontageTemplateRow).where(MontageTemplateRow.code == code)
+    )).scalar_one_or_none()
+    if row is None:
+        raise MontageError(f"шаблона {code!r} нет ни в библиотеке, ни среди своих")
+    return montage_from_channels(list(row.channels or []), code=row.code, label_ru=row.label_ru)
 
 
 async def _current(db: AsyncSession, session_id: UUID) -> SessionMontageRow | None:

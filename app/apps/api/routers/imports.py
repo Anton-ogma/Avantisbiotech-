@@ -37,7 +37,10 @@ def _readable(exc: Exception) -> str:
 router = APIRouter(prefix="/sessions", tags=["imports"])
 
 MAX_BYTES = 32 * 1024 * 1024      # лимит §5, MUST: молчаливого приёма гигабайта нет
-ALLOWED_SUFFIX = (".csv", ".txt", ".xml", ".c3d", ".edf", ".pdf")
+#: Снимки экрана приняты сюда осознанно (Р-44): проводной миограф часто не
+#: даёт выгрузки вообще, и до этого такой файл терялся целиком.
+ALLOWED_SUFFIX = (".csv", ".txt", ".xml", ".c3d", ".edf", ".pdf",
+                  ".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff")
 
 
 @router.post("/{session_id}/imports", response_model=ImportOut, status_code=status.HTTP_201_CREATED)

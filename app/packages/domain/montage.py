@@ -144,6 +144,32 @@ def build_montage(
                           warnings=tuple(warnings))
 
 
+def montage_from_channels(
+    channels: list[dict], *, code: str, label_ru: str,
+    labels: dict[str, str] | None = None,
+) -> SessionMontage:
+    """Разворачивает произвольный набор «мышца + сторона» в монтаж (Р-45).
+
+    Тот же путь, что у встроенного шаблона: `side: both` даёт два отвода.
+    Своим шаблонам отдельная арифметика не нужна и была бы вредна — она
+    разошлась бы с поставляемыми в первый же месяц.
+    """
+    catalog = load_muscles()
+    labels = labels or {}
+    out: list[dict] = []
+    for ch in channels:
+        muscle = catalog.get(str(ch.get("muscle", "")))
+        if muscle is None:
+            raise MontageError(f"мышцы {ch.get('muscle')!r} нет в каталоге")
+        side = str(ch.get("side", "both"))
+        if side not in ("L", "R", "both"):
+            raise MontageError(f"{muscle.code}: сторона {side!r} недопустима")
+        for s in (SIDES if side == "both" else (side,)):
+            default = f"{muscle.code}_{s}"
+            out.append({"label": labels.get(default, default), "muscle": muscle.code, "side": s})
+    return build_montage(out, template=code, note=f"из шаблона «{label_ru}»")
+
+
 def from_template(code: str, *, labels: dict[str, str] | None = None) -> SessionMontage:
     """Разворачивает шаблон в монтаж.
 

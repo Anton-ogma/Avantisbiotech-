@@ -71,7 +71,7 @@ async def build() -> None:
         for path in ("/platform", "/params", "/sessions",
                      "/emg/muscles", "/emg/montages",
                      "/research/repeatability", "/research/progress",
-                     "/research/protocol-analytics"):
+                     "/research/protocol-analytics", "/devices/ble-profiles"):
             await grab(path)
 
         # Печатный протокол прибора — необязательный локальный файл. В

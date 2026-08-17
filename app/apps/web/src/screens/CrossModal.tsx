@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CompareOut, type CrossModal as CM, type FiguresOut, type Measurements,
          type SessionOut } from "../lib/api";
-import { AnatomyCompare, AnatomySet, type Values } from "../components/Anatomy";
+import { AnatomyCompare, AnatomySet, type Orientation, type Values }
+  from "../components/Anatomy";
 import { BodyMap, RegionBars } from "../components/BodyMap";
 import { ProtocolFigures } from "../components/ProtocolFigures";
 import { CondylarProfile, EmgMirror, SignalPanel, type Channel,
@@ -45,6 +46,7 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
   const [figures, setFigures] = useState<FiguresOut | null>(null);
   const [region, setRegion] = useState("");
   const [view, setView] = useState<"single" | "table">("single");
+  const [orientation, setOrientation] = useState<Orientation>("rows");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { if (!selected && sessions.length) setSelected(sessions[0].id); }, [sessions, selected]);
@@ -231,14 +233,24 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
 
               {shown && shown.columns.length > 0 && (
                 <>
-                  <div className="section-title">Схемы по пробам</div>
+                  <div className="row" style={{ marginTop: 26, marginBottom: 12 }}>
+                    <div className="section-title" style={{ margin: 0 }}>Схемы по пробам</div>
+                    <span className="spacer" />
+                    <Segmented value={orientation} onChange={setOrientation} options={[
+                      { value: "rows", label: "Горизонтально" },
+                      { value: "columns", label: "Вертикально" },
+                    ]} />
+                  </div>
                   <Card>
                     <p className="tile-hint" style={{ marginTop: 0 }}>
-                      Один вид — один ряд, столбцы — пробы. Схемы строятся из
-                      измеренных величин: угол проводится под измеренным углом,
-                      размах движения — веером от границы до границы.
+                      {orientation === "rows"
+                        ? "Строка — вид, столбцы — пробы: сравнение одного показателя между пробами."
+                        : "Колонка — проба, виды сверху вниз: чтение пробы целиком."}
+                      {" "}Схемы строятся из измеренных величин: угол проводится под
+                      измеренным углом, размах движения — веером от границы до границы.
                     </p>
-                    <AnatomyCompare probes={shown.columns.map((c) => ({
+                    <AnatomyCompare orientation={orientation}
+                                    probes={shown.columns.map((c) => ({
                       code: c.code,
                       label: c.code.replace(/^(MAND|PODAL|CTRL|CDG)_/, ""),
                       values: valuesByProbe.get(c.code) ?? {},

@@ -390,10 +390,35 @@ const VIEWS = [
  *  ОДИН вид между пробами, и рядом должны стоять одинаковые схемы, а не
  *  разные. Число проб не ограничено — ряд прокручивается.
  */
-export function AnatomyCompare({ probes }: {
+export type Orientation = "rows" | "columns";
+
+export function AnatomyCompare({ probes, orientation = "rows" }: {
   probes: { code: string; label: string; values: Values }[];
+  orientation?: Orientation;
 }) {
   if (probes.length === 0) return null;
+
+  // «rows» — строка на вид, столбцы пробы: так сравнивают ОДИН показатель между
+  // пробами. «columns» — колонка на пробу, виды сверху вниз: так читают пробу
+  // целиком. Это разные вопросы, и ни одна раскладка не отвечает на оба.
+  if (orientation === "columns") {
+    return (
+      <div className="fig-columns">
+        {probes.map((p) => (
+          <div key={p.code} className="fig-column">
+            <div className="fig-column-head">{p.label}</div>
+            {VIEWS.map(({ key, title, C }) => (
+              <div key={key}>
+                <div className="fig-column-view">{title}</div>
+                <C values={p.values} />
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <>
       {VIEWS.map(({ key, title, C }) => (

@@ -490,3 +490,72 @@ def load_montages(version: str = "2026.1") -> MontageLibrary:
     if not montages:
         raise ConfigError("библиотека монтажей пуста")
     return MontageLibrary(version=str(raw.get("version", version)), montages=tuple(montages))
+
+
+# ── Профили беспроводных датчиков ЭМГ (Р-44) ─────────────────────────────────
+
+@dataclass(frozen=True, slots=True)
+class BleProfile:
+    """GATT-профиль датчика. Данные, а не код: UUID и упаковка у каждого свои."""
+
+    code: str
+    label_ru: str
+    vendor: str
+    #: False — профиль описан по документации, но на железе не проверен. Записи
+    #: по нему помечаются: ошибка в unit_scale_uv даёт правдоподобные, но
+    #: неверные микровольты, и это худший вид ошибки в измерительном тракте.
+    verified: bool
+    note: str
+    service_uuid: str
+    data_characteristic: str
+    control_characteristic: str | None
+    sample_format: str
+    channels_per_packet: int
+    channel_order: tuple[str, ...]
+    fs_hz: float
+    unit_scale_uv: float
+
+
+@dataclass(frozen=True, slots=True)
+class BleProfileLibrary:
+    version: str
+    profiles: tuple[BleProfile, ...]
+
+    def get(self, code: str) -> BleProfile | None:
+        return next((p for p in self.profiles if p.code == code), None)
+
+
+@lru_cache(maxsize=4)
+def load_ble_profiles(version: str = "2026.1") -> BleProfileLibrary:
+    raw = _read(CONFIG_ROOT / "devices" / "ble_profiles.yaml")
+    profiles = []
+    for p in (raw.get("profiles") or []):
+        order = tuple(p.get("channel_order") or ())
+        count = int(p.get("channels_per_packet", 1))
+        if order and len(order) != count:
+            raise ConfigError(
+                f"профиль {p['code']}: каналов в пакете {count}, а порядок задан "
+                f"для {len(order)} — перестановка даёт зеркально неверные стороны"
+            )
+        if not order:
+            order = tuple(f"CH{i + 1}" for i in range(count))
+        if float(p.get("fs_hz", 0)) <= 0:
+            raise ConfigError(f"профиль {p['code']}: не задана частота дискретизации")
+        if float(p.get("unit_scale_uv", 0)) <= 0:
+            raise ConfigError(
+                f"профиль {p['code']}: не задан коэффициент к микровольтам; "
+                "без него амплитуда — сырые отсчёты АЦП, а не мкВ"
+            )
+        profiles.append(BleProfile(
+            code=p["code"], label_ru=p.get("label_ru", p["code"]),
+            vendor=p.get("vendor", "—"), verified=bool(p.get("verified", False)),
+            note=p.get("note", ""), service_uuid=p["service_uuid"],
+            data_characteristic=p["data_characteristic"],
+            control_characteristic=p.get("control_characteristic"),
+            sample_format=p.get("sample_format", "int16_le"),
+            channels_per_packet=count, channel_order=order,
+            fs_hz=float(p["fs_hz"]), unit_scale_uv=float(p["unit_scale_uv"]),
+        ))
+    if not profiles:
+        raise ConfigError("библиотека профилей датчиков пуста")
+    return BleProfileLibrary(version=str(raw.get("version", version)), profiles=tuple(profiles))

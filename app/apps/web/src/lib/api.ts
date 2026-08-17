@@ -132,6 +132,24 @@ export const api = {
   sessionMontage: (id: string) =>
     call<{ session_id: string; montage: MontageOut | null; note?: string }>(
       `/sessions/${id}/montage`),
+  bleProfiles: () =>
+    call<{ version: string; profiles: BleProfile[]; note: string }>("/devices/ble-profiles"),
+  bleCapture: (id: string, body: {
+    trial_id: string; profile: string; channels: Record<string, number[]>;
+    timestamps_ms?: number[]; device_serial?: string;
+  }) => call<BleCaptureOut>(`/sessions/${id}/ble-capture`, {
+    method: "POST", body: JSON.stringify(body),
+  }),
+  saveTemplate: (body: {
+    code: string; label_ru: string; purpose: string;
+    channels: { muscle: string; side: string }[];
+  }) => call<{ template: MontageTemplate; warnings: string[] }>("/emg/montages", {
+    method: "POST", body: JSON.stringify(body),
+  }),
+  archiveTemplate: (code: string) =>
+    call<{ code: string; archived: boolean; note: string }>(`/emg/montages/${code}`, {
+      method: "DELETE",
+    }),
   setMontage: (id: string, body: {
     template: string | null;
     channels: { label: string; muscle: string; side: string }[];
@@ -257,11 +275,33 @@ export interface MontageChannelOut {
   label: string; muscle: string; muscle_label_ru?: string; side: string;
   param_code?: string;
 }
+export interface MontageGroup {
+  muscle: string; side: string; muscle_label_ru: string; region: string;
+}
 export interface MontageTemplate {
   code: string; label_ru: string; purpose: string;
   channels: MontageChannelOut[]; channel_count: number;
+  /** false — свой шаблон клиники, а не поставляемый с платформой. */
+  builtin?: boolean; created_by?: string; groups?: MontageGroup[];
 }
 export interface MontageOut {
   id: string; template: string | null; note: string; set_by: string;
   created_at: string; channels: MontageChannelOut[];
+}
+
+/** GATT-профиль датчика ЭМГ. verified=false — на железе не проверен: ошибка в
+ *  unit_scale_uv даёт правдоподобные, но неверные микровольты. */
+export interface BleProfile {
+  code: string; label_ru: string; vendor: string; verified: boolean; note: string;
+  service_uuid: string; data_characteristic: string; control_characteristic: string | null;
+  sample_format: string; channels_per_packet: number; channel_order: string[];
+  fs_hz: number; unit_scale_uv: number;
+}
+export interface BleCaptureOut {
+  status: string; import_id?: string; probe_code?: string;
+  fs_declared?: number; fs_actual?: number | null; duration_sec?: number;
+  params?: Record<string, number>;
+  channels?: { label: string; rms_uv: number; peak_uv: number; snr_db: number | null;
+               mains_share_db: number | null; samples: number; flags: string[] }[];
+  unmapped?: string[]; quality_flags?: string[]; note?: string; reason?: string;
 }

@@ -10,9 +10,11 @@ from .emg_csv import EmgCsvParser, MyolineCsvParser
 from .formetric_csv import FormetricCsvParser
 from .formetric_pdf import FormetricPdfProtocolParser
 from .pedoscan_csv import PedoscanCsvParser
+from .screenshot import ScreenshotParser
 
 __all__ = [
     "PARSERS", "Figure", "ParseResult", "Parser", "ParserNotFound",
     "detect_parser", "parse_blob", "FormetricCsvParser", "PedoscanCsvParser",
     "FormetricPdfProtocolParser", "CadiaxNumericParser", "EmgCsvParser", "MyolineCsvParser",
+    "ScreenshotParser",
 ]
