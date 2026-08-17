@@ -81,8 +81,16 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
    *  схемы, иначе каждая лезла бы в `measurements` со своим разбором. */
   const valuesByProbe = useMemo(() => {
     const out = new Map<string, Values>();
+    // Структурные величины (ось ног) измеряются один раз за сессию и по пробам
+    // не меняются (§14.2 п. 8) — подмешиваются при показе, а не в данные.
+    const structural: Values = {};
     for (const trial of raw?.trials ?? []) {
-      const acc = out.get(trial.probe_code) ?? {};
+      for (const p of trial.params) {
+        if (p.code.startsWith("LEG_AXIS_")) structural[p.code] = p.value;
+      }
+    }
+    for (const trial of raw?.trials ?? []) {
+      const acc = out.get(trial.probe_code) ?? { ...structural };
       for (const p of trial.params) acc[p.code] = p.value;
       out.set(trial.probe_code, acc);
     }
@@ -383,20 +391,24 @@ export function CrossModalScreen({ sessions }: { sessions: SessionOut[] }) {
 
           {current && (
             <>
-              <div className="section-title">Схемы пробы</div>
-              <Card>
-                <AnatomySet values={valuesByProbe.get(current.probe_code) ?? {}} />
-              </Card>
-
               {figures && figures.figures.some((f) => f.probe_code === current.probe_code) && (
                 <>
-                  <div className="section-title">Иллюстрации протокола прибора</div>
+                  <div className="section-title">Отчёт прибора · как напечатано</div>
                   <Card>
                     <ProtocolFigures figures={figures.figures} probe={current.probe_code} />
-                    <p className="tile-hint">{figures.note}</p>
                   </Card>
                 </>
               )}
+
+              <div className="section-title">Схемы из измерений</div>
+              <Card>
+                <p className="tile-hint" style={{ marginTop: 0 }}>
+                  Не пересказ отчёта, а другой инструмент: одна и та же геометрия
+                  из чисел, поэтому пробы можно поставить рядом и сравнить. Отчёт
+                  прибора существует для одной пробы одного визита.
+                </p>
+                <AnatomySet values={valuesByProbe.get(current.probe_code) ?? {}} />
+              </Card>
 
               <div className="section-title">Четыре сигнала пробы</div>
               <Card>

@@ -405,6 +405,25 @@ button.pill[aria-pressed="true"] {
   min-height: 120px; font-size: 12px; color: var(--text-3); text-align: center;
 }
 
+/* Иллюстрации протокола — главное изображение пробы (Р-46). Крупно и рядом со
+   своими напечатанными значениями, как на листе, а не полоской миниатюр. */
+.report-grid {
+  display: grid; gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+}
+.report-fig {
+  margin: 0; padding: 12px; border-radius: 16px;
+  border: 1px solid var(--stroke); background: #fff;
+  display: flex; flex-direction: column; gap: 10px; align-items: center;
+}
+.report-image { all: unset; cursor: zoom-in; display: block; width: 100%; }
+.report-image img { width: 100%; height: auto; display: block; }
+.report-captions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.report-captions img { max-height: 22px; width: auto; display: block; }
+@media (max-width: 700px) {
+  .report-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}
+
 /* Оригинальные иллюстрации протокола: миниатюры с раскрытием по клику. */
 .fig-strip { display: flex; gap: 12px; overflow-x: auto; align-items: center; padding-bottom: 4px; }
 .fig-thumb {

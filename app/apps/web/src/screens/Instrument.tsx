@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, type FiguresOut, type MeasuredParam, type Measurements,
          type SessionOut } from "../lib/api";
 import { AnatomyCompare, type Orientation } from "../components/Anatomy";
@@ -61,6 +61,19 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
   const current = data?.trials.find((t) => t.trial_id === trial);
   const { paired, single } = current ? pairs(current.params) : { paired: [], single: [] };
   const shownFigures = (figures?.figures ?? []).filter((f) => f.probe_code === current?.probe_code);
+  /** Структурные величины измеряются один раз за сессию и по пробам не меняются
+   *  (§14.2 п. 8). Дублировать их измерением в каждой пробе значило бы объявить
+   *  сделанными измерения, которых не делали, — поэтому они подмешиваются к
+   *  значениям пробы при показе, а не в данные. */
+  const structural = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const tr of data?.trials ?? []) {
+      for (const pp of tr.params) {
+        if (pp.code.startsWith("LEG_AXIS_")) out[pp.code] = pp.value;
+      }
+    }
+    return out;
+  }, [data]);
 
   return (
     <>
@@ -100,6 +113,15 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
               </div>
             ))}
           </Card>
+
+          {shownFigures.length > 0 && (
+            <>
+              <div className="section-title">Отчёт прибора · как напечатано</div>
+              <Card>
+                <ProtocolFigures figures={shownFigures} />
+              </Card>
+            </>
+          )}
 
           {data.trials.length > 0 && (
             <>
@@ -145,22 +167,14 @@ export function Instrument({ sessions }: { sessions: SessionOut[] }) {
                   return {
                     code: id,
                     label: (tr?.label_ru ?? id).replace(/^(MAND|PODAL|CTRL|CDG)[_\s]/, ""),
-                    values: Object.fromEntries((tr?.params ?? []).map((pp) => [pp.code, pp.value])),
+                    values: { ...structural,
+                      ...Object.fromEntries((tr?.params ?? []).map((pp) => [pp.code, pp.value])) },
                   };
                 })} />
               )}
             </>
           )}
 
-          {shownFigures.length > 0 && (
-            <>
-              <div className="section-title">Иллюстрации протокола прибора</div>
-              <Card>
-                <ProtocolFigures figures={shownFigures} />
-                {figures && <p className="tile-hint">{figures.note}</p>}
-              </Card>
-            </>
-          )}
 
           {paired.length > 0 && (
             <>

@@ -42,7 +42,19 @@ BASE = {
     "VERTEBRAL_ROTATION_RMS": 4.2, "KYPHOTIC_ANGLE_ICT_ITL": 45.3,
     "LORDOTIC_ANGLE_ITL_ILS": 38.9, "PELVIC_OBLIQUITY_DL_DR": 3.4,
     "PELVIC_TORSION": 2.1, "PELVIC_TILT": 10.2, "TRUNK_INCLINATION": 3.6,
+    # Таз целиком: ротация и УГЛОВОЙ перекос. Без них схема таза оставалась
+    # пустой на каждой пробе — прибор эти величины даёт, а демо их не порождало.
+    "PELVIC_ROTATION": 2.8, "PELVIC_OBLIQUITY_ANGLE": 4.1,
 }
+
+#: Подометрия. Отдельным словарём, потому что это ДРУГАЯ модальность: доли
+#: нагрузки суммируются в 100 %, и портить это шумом по каждому каналу нельзя.
+BASE_PEDOSCAN = {"COP_PATH_LENGTH": 210.0, "COP_AREA": 94.0}
+BASE_LOAD_LEFT = 47.5
+
+#: Ось ног — СТРУКТУРНАЯ величина (§14.2 п. 8): от пробы к пробе не меняется и
+#: сдвигов по пробам не получает. Кладётся один раз на сессию.
+BASE_LEG_AXIS = {"LEG_AXIS_VARUS_VALGUS_L": -3.2, "LEG_AXIS_VARUS_VALGUS_R": 2.4}
 
 #: Изометрическая сила под пробой (Р-41): в этом протоколе myoline ставится на
 #: тех же условиях, что формометрия, ЭМГ и кондилография.
@@ -60,14 +72,19 @@ BASE_EMG = {
 
 #: Эффекты по пробам: множители сдвига в единицах SDC.
 EFFECTS = {
-    "MAND_CLENCH": {"LATERAL_DEVIATION_RMS": 2.4, "PELVIC_TILT": 1.6, "TRUNK_INCLINATION": 1.2},
+    "MAND_CLENCH": {"LATERAL_DEVIATION_RMS": 2.4, "PELVIC_TILT": 1.6, "TRUNK_INCLINATION": 1.2,
+                    "PELVIC_ROTATION": 1.4, "PELVIC_OBLIQUITY_ANGLE": 1.1},
     "CTRL_SHAM_MANDIBULAR": {"LATERAL_DEVIATION_RMS": 0.2, "PELVIC_TILT": 0.1},
-    "MAND_LAT_LEFT": {"LATERAL_DEVIATION_RMS": -1.4, "PELVIC_OBLIQUITY_DL_DR": -1.1},
-    "MAND_LAT_RIGHT": {"LATERAL_DEVIATION_RMS": 1.1, "PELVIC_OBLIQUITY_DL_DR": 0.9},
-    "PODAL_WEDGE_L": {"PELVIC_OBLIQUITY_DL_DR": -1.8, "LATERAL_DEVIATION_RMS": -0.9},
+    "MAND_LAT_LEFT": {"LATERAL_DEVIATION_RMS": -1.4, "PELVIC_OBLIQUITY_DL_DR": -1.1,
+                      "PELVIC_OBLIQUITY_ANGLE": -0.9, "PELVIC_ROTATION": -1.2},
+    "MAND_LAT_RIGHT": {"LATERAL_DEVIATION_RMS": 1.1, "PELVIC_OBLIQUITY_DL_DR": 0.9,
+                       "PELVIC_OBLIQUITY_ANGLE": 0.8, "PELVIC_ROTATION": 1.1},
+    "PODAL_WEDGE_L": {"PELVIC_OBLIQUITY_DL_DR": -1.8, "LATERAL_DEVIATION_RMS": -0.9,
+                      "PELVIC_OBLIQUITY_ANGLE": -1.5, "PELVIC_ROTATION": -0.8},
     "MAND_SPLINT_THERAPEUTIC": {
         "LATERAL_DEVIATION_RMS": -2.6, "PELVIC_TILT": -1.9,
         "TRUNK_IMBALANCE_VP_DM": -1.5, "VERTEBRAL_ROTATION_RMS": -1.2,
+        "PELVIC_OBLIQUITY_ANGLE": -1.7, "PELVIC_ROTATION": -1.0,
     },
 }
 
@@ -92,6 +109,29 @@ EMG_EFFECTS = {
     "MAND_SPLINT_THERAPEUTIC": {"EMG_RMS_MASSETER_R": -1.4, "EMG_RMS_TRAPEZIUS_R": -1.1,
                                 "EMG_RMS_ERECTOR_SPINAE_R": -0.9},
 }
+
+
+#: Смещение опоры по пробам, п.п. на левую стопу. Клин под левую пятку
+#: перераспределяет нагрузку — это и есть смысл подометрической пробы.
+LOAD_SHIFT = {
+    "PODAL_WEDGE_L": 3.4, "MAND_CLENCH": -1.8, "MAND_LAT_LEFT": 1.2,
+    "MAND_LAT_RIGHT": -1.1, "MAND_SPLINT_THERAPEUTIC": 1.6,
+    "CTRL_SHAM_MANDIBULAR": 0.1,
+}
+
+
+def _pedoscan(code: str, scale: float, rng: random.Random) -> dict[str, float]:
+    """Подометрия пробы. Доли нагрузки дополняют друг друга до 100 %.
+
+    Шуметь ими независимо нельзя: сумма перестала бы равняться сотне, а это не
+    погрешность прибора, а нарушение определения величины.
+    """
+    left = BASE_LOAD_LEFT * scale + LOAD_SHIFT.get(code, 0.0) + rng.gauss(0, 0.6)
+    left = max(20.0, min(80.0, left))
+    out = {"LOAD_SHARE_LEFT": round(left, 2), "LOAD_SHARE_RIGHT": round(100.0 - left, 2)}
+    for param, base_value in BASE_PEDOSCAN.items():
+        out[param] = round(base_value * scale + rng.gauss(0, base_value * 0.06), 2)
+    return out
 
 
 def _asymmetry(params: dict[str, float], prefix: str, out_prefix: str) -> None:
@@ -191,6 +231,18 @@ async def seed(patients: int = 6) -> None:
                     db.add(Measurement(trial_id=trial.id, modality=modality,
                                        params=params, quality_flags=flags))
 
+                db.add(Measurement(trial_id=trial.id, modality="pedoscan",
+                                   params=_pedoscan(code, personal_scale, rng)))
+                if position == 0:
+                    # Ось ног структурна: измеряется один раз, по пробам не
+                    # меняется и Δ не получает (§14.2 п. 8).
+                    db.add(Measurement(
+                        trial_id=trial.id, modality="leg_axis",
+                        params={k: round(v * personal_scale, 2)
+                                for k, v in BASE_LEG_AXIS.items()},
+                        quality_flags=["structural_no_delta"],
+                    ))
+
             session.status = "probes_running"
             await db.flush()
 
@@ -227,6 +279,8 @@ async def seed(patients: int = 6) -> None:
                     _asymmetry(params, "MYO_FORCE_", "MYO_ASYM_")
                     db.add(Measurement(trial_id=trial.id, modality=modality,
                                        params=params, quality_flags=flags))
+                db.add(Measurement(trial_id=trial.id, modality="pedoscan",
+                                   params=_pedoscan(code, personal_scale, rng)))
             session.pass_count = 2
             session.status = "quality_reviewed"
             await db.flush()

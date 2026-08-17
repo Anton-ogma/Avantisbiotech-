@@ -267,6 +267,53 @@ export function SpineSagittal({ values, label }: { values: Values; label?: strin
   );
 }
 
+/* ── Колени: ось ноги ─────────────────────────────────────────────────────── */
+
+export function KneeAxis({ values, label }: { values: Values; label?: string }) {
+  const l = pick(values, "LEG_AXIS_VARUS_VALGUS_L");
+  const r = pick(values, "LEG_AXIS_VARUS_VALGUS_R");
+  if (l === null && r === null) {
+    return <NoData title="Колени · ось ноги" why="ось ноги не измерена" />;
+  }
+  // Знак по канону §5.3: вправо положительно. Вальгус и варус — это отклонение
+  // оси голени от оси бедра, поэтому рисуется излом, а не наклон всей ноги.
+  const leg = (deg: number | null, x: number) => {
+    if (deg === null) return null;
+    const dx = Math.max(-14, Math.min(14, deg * 1.6));
+    return { hipX: x, kneeX: x + dx, ankleX: x };
+  };
+  const legs = [
+    { key: "L", geom: leg(l, 40), value: l },
+    { key: "R", geom: leg(r, 80), value: r },
+  ];
+
+  return (
+    <div className="fig">
+      <div className="fig-title">{label ?? "Колени · ось ноги"}</div>
+      <svg viewBox="0 0 120 110" role="img" aria-label="Ось ног: варус и вальгус">
+        {legs.map(({ key, geom }) => geom && (
+          <g key={key}>
+            {/* Отвес от бедра к стопе — то, ОТ ЧЕГО отклонение. */}
+            <line x1={geom.hipX} y1="14" x2={geom.ankleX} y2="96"
+                  stroke="var(--stroke)" strokeWidth="1" strokeDasharray="3 3" />
+            <path d={`M${geom.hipX},14 L${geom.kneeX},55 L${geom.ankleX},96`}
+                  fill="none" stroke="var(--accent)" strokeWidth="3"
+                  strokeLinejoin="round" strokeLinecap="round" />
+            <circle cx={geom.kneeX} cy="55" r="4" fill="var(--accent-2)" />
+          </g>
+        ))}
+        <text x="40" y="107" textAnchor="middle" className="fig-note-svg">Л</text>
+        <text x="80" y="107" textAnchor="middle" className="fig-note-svg">П</text>
+      </svg>
+      <Caption
+        text={[l !== null ? `Л ${fmt(l, "°")}` : null, r !== null ? `П ${fmt(r, "°")}` : null]
+          .filter(Boolean).join(" · ")}
+        sub="структурная величина: одна на сессию, Δ по пробам не считается"
+      />
+    </div>
+  );
+}
+
 /* ── Стопы: распределение опоры ───────────────────────────────────────────── */
 
 export function FeetLoad({ values, label }: { values: Values; label?: string }) {
@@ -369,6 +416,7 @@ export function AnatomySet({ values, label, compact = false }: {
       <SpineSagittal values={values} label={label} />
       <PelvisFrontal values={values} label={label} />
       <PelvisAxial values={values} label={label} />
+      <KneeAxis values={values} label={label} />
       <FeetLoad values={values} label={label} />
       <StrengthBars values={values} label={label} />
     </div>
@@ -380,6 +428,7 @@ const VIEWS = [
   { key: "spine_sagittal", title: "Позвоночник · сагитталь", C: SpineSagittal },
   { key: "pelvis_obliquity", title: "Таз · перекос", C: PelvisFrontal },
   { key: "pelvis_rotation", title: "Таз · ротация", C: PelvisAxial },
+  { key: "knee", title: "Колени · ось ноги", C: KneeAxis },
   { key: "feet", title: "Стопы · опора", C: FeetLoad },
   { key: "strength", title: "Сила · myoline", C: StrengthBars },
 ] as const;
