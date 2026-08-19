@@ -1,13 +1,23 @@
 # On-prem развёртывание. MUST (Р-23): ФЗ-152 ст. 18 ч. 5 — локализация обязательна.
 # Ни один сервис не обращается за пределы контура.
+#
+# Секретов со значениями по умолчанию здесь НЕТ. Синтаксис `${VAR:?...}` роняет
+# `docker compose up` с внятным текстом, если переменная не задана: развёртывание,
+# молча поднявшееся с паролем `diers`, — это не развёртывание, а открытая база.
+# Значения берутся из .env рядом с файлом (см. .env.example).
 name: diers
+
+x-db-env: &db-env
+  DIERS_DATABASE_URL: postgresql+asyncpg://diers:${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}@pgbouncer:5432/diers
+  DIERS_REDIS_URL: redis://redis:6379/0
+  DIERS_GATEWAY_TOKEN: ${DIERS_GATEWAY_TOKEN:?задайте DIERS_GATEWAY_TOKEN в .env — openssl rand -hex 32}
 
 services:
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: diers
-      POSTGRES_PASSWORD: diers
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
       POSTGRES_DB: diers
     command: >
       postgres -c max_connections=400 -c shared_buffers=1GB
@@ -26,7 +36,7 @@ services:
     environment:
       DB_HOST: db
       DB_USER: diers
-      DB_PASSWORD: diers
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?задайте POSTGRES_PASSWORD в .env}
       DB_NAME: diers
       POOL_MODE: transaction
       MAX_CLIENT_CONN: "5000"
@@ -43,34 +53,50 @@ services:
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: diers
-      MINIO_ROOT_PASSWORD: diers-secret
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?задайте MINIO_ROOT_PASSWORD в .env}
     volumes: [miniodata:/data]
+
+  # Миграции — отдельный одноразовый сервис, а не шаг внутри API. Иначе при двух
+  # репликах обе применяют схему одновременно, и вторая падает на полпути.
+  migrate:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment: *db-env
+    depends_on:
+      pgbouncer: { condition: service_started }
+    restart: "no"
 
   api:
     build: .
     environment:
-      DIERS_DATABASE_URL: postgresql+asyncpg://diers:diers@pgbouncer:5432/diers
-      DIERS_REDIS_URL: redis://redis:6379/0
+      <<: *db-env
       DIERS_S3_ENDPOINT: http://minio:9000
-      DIERS_INTENDED_USE: research
+      DIERS_INTENDED_USE: ${DIERS_INTENDED_USE:-research}
       DIERS_CORS_ORIGINS: '["http://localhost:8080"]'
     depends_on:
-      pgbouncer: { condition: service_started }
+      migrate: { condition: service_completed_successfully }
       redis: { condition: service_started }
-    ports: ["8000:8000"]
+    # Порт наружу НЕ публикуется: API доступен только через nginx рядом. Раньше
+    # он висел на 8000 для всех, а роль вызывающей стороны приходила заголовком —
+    # то есть админом объявлял себя любой, кто видел порт.
+    expose: ["8000"]
     deploy:
       replicas: 2                    # инстансы без состояния, масштабируются линейно
 
   worker:
     build: .
     command: ["arq", "apps.worker.tasks.WorkerSettings"]
-    environment:
-      DIERS_DATABASE_URL: postgresql+asyncpg://diers:diers@pgbouncer:5432/diers
-      DIERS_REDIS_URL: redis://redis:6379/0
-    depends_on: [redis, pgbouncer]
+    environment: *db-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
 
   web:
     build: ./apps/web
+    environment:
+      # Секрет хоста подставляет прокси: браузеру его не отдают — во вкладке
+      # он был бы виден любому, кто открыл инструменты разработчика.
+      DIERS_GATEWAY_TOKEN: ${DIERS_GATEWAY_TOKEN:?задайте DIERS_GATEWAY_TOKEN в .env}
     ports: ["8080:80"]
     depends_on: [api]
 

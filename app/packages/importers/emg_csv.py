@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:                       # только для подсказки типа
     from domain.montage import ChannelMap
 
+from typing import ClassVar
+
 from domain.config import load_muscles
 
 from .base import ParseResult, parse_number, read_rows, register
@@ -29,7 +31,7 @@ CONDITION_KEYS = ("Condition", "Probe", "Проба", "Условие", "Test")
 MARKERS = ("RMS", "µV", "uV", "мкВ", "EMG", "ЭМГ")
 
 
-def resolve_channel(label: str, montage: "ChannelMap | None" = None) -> tuple[str, str] | None:
+def resolve_channel(label: str, montage: ChannelMap | None = None) -> tuple[str, str] | None:
     """«MASS_L», «Masseter left», «жев слева» → ('MASSETER', 'L').
 
     Каталог мышц — единственный словарь (Р-42): раньше алиасы жили здесь
@@ -69,7 +71,7 @@ class EmgCsvParser:
     format_id = "emg-csv-v1"
     modality = "emg"
 
-    def detect(self, blob: bytes, montage: "ChannelMap | None" = None) -> bool:
+    def detect(self, blob: bytes, montage: ChannelMap | None = None) -> bool:
         """Признак формата — РАСПОЗНАННЫЕ КАНАЛЫ, а не слово RMS в заголовке.
 
         Слово «rms» встречается и в формометрии («Lateral Deviation rms»),
@@ -98,14 +100,14 @@ class EmgCsvParser:
             for row in rows[:5]
         )
 
-    def parse(self, blob: bytes, montage: "ChannelMap | None" = None) -> list[ParseResult]:
+    def parse(self, blob: bytes, montage: ChannelMap | None = None) -> list[ParseResult]:
         headers, rows = read_rows(blob)
         long_form = any(h.lower() in ("muscle", "мышца", "channel", "канал") for h in headers)
         if long_form:
             return [self._long(rows, montage)]
         return [self._wide(row, montage) for row in rows]
 
-    def _wide(self, row: dict[str, str], montage: "ChannelMap | None" = None) -> ParseResult:
+    def _wide(self, row: dict[str, str], montage: ChannelMap | None = None) -> ParseResult:
         params: dict[str, float] = {}
         unmapped: dict[str, str] = {}
         for header, raw in row.items():
@@ -123,12 +125,13 @@ class EmgCsvParser:
         return self._finish(params, unmapped, condition, row)
 
     def _long(self, rows: list[dict[str, str]],
-              montage: "ChannelMap | None" = None) -> ParseResult:
+              montage: ChannelMap | None = None) -> ParseResult:
         params: dict[str, float] = {}
         unmapped: dict[str, str] = {}
         condition = ""
         for row in rows:
-            muscle_raw = next((row[k] for k in ("Muscle", "Мышца", "Channel", "Канал") if row.get(k)), "")
+            muscle_raw = next(
+                (row[k] for k in ("Muscle", "Мышца", "Channel", "Канал") if row.get(k)), "")
             side_raw = next((row[k] for k in ("Side", "Сторона") if row.get(k)), "")
             value = next((parse_number(row[k]) for k in ("RMS", "RMS_uV", "Value", "Значение")
                           if row.get(k)), None)
@@ -147,9 +150,11 @@ class EmgCsvParser:
                 condition: str, raw: dict[str, str]) -> ParseResult:
         # Асимметрия каналов — величина, ради которой ЭМГ здесь и нужна.
         for muscle in {c[len("EMG_RMS_"):-2] for c in params if c.startswith("EMG_RMS_")}:
-            l, r = params.get(f"EMG_RMS_{muscle}_L"), params.get(f"EMG_RMS_{muscle}_R")
-            if l is not None and r is not None and (abs(l) + abs(r)) > 0:
-                params[f"EMG_ASYM_{muscle}"] = round(200 * (r - l) / (abs(r) + abs(l)), 2)
+            left = params.get(f"EMG_RMS_{muscle}_L")
+            right = params.get(f"EMG_RMS_{muscle}_R")
+            if left is not None and right is not None and (abs(left) + abs(right)) > 0:
+                params[f"EMG_ASYM_{muscle}"] = round(
+                    200 * (right - left) / (abs(right) + abs(left)), 2)
 
         flags = ["emg_amplitude_session_scoped"]      # MUST §9.8, не декоративный флаг
         if not params:
@@ -183,7 +188,7 @@ class MyolineCsvParser:
     format_id = "myoline-csv-v1"
     modality = "myoline"
 
-    GROUP_ALIASES = {
+    GROUP_ALIASES: ClassVar[dict[str, str]] = {
         "trunk_ext": "TRUNK_EXT", "extension": "TRUNK_EXT", "разгибание": "TRUNK_EXT",
         "trunk_flex": "TRUNK_FLEX", "flexion": "TRUNK_FLEX", "сгибание": "TRUNK_FLEX",
         "lat_left": "TRUNK_LAT_L", "наклон_влево": "TRUNK_LAT_L",
@@ -247,7 +252,9 @@ def add_lateral_asymmetry(params: dict[str, float]) -> None:
     Единая формула важнее удобства — иначе три «асимметрии» в одном отчёте
     оказались бы величинами с разной шкалой под одним словом.
     """
-    r, l = params.get("MYO_FORCE_TRUNK_LAT_R"), params.get("MYO_FORCE_TRUNK_LAT_L")
-    if r is None or l is None or (abs(r) + abs(l)) == 0:
+    right = params.get("MYO_FORCE_TRUNK_LAT_R")
+    left = params.get("MYO_FORCE_TRUNK_LAT_L")
+    if right is None or left is None or (abs(right) + abs(left)) == 0:
         return
-    params["MYO_ASYM_TRUNK_LAT"] = round(200 * (r - l) / (abs(r) + abs(l)), 2)
+    params["MYO_ASYM_TRUNK_LAT"] = round(
+        200 * (right - left) / (abs(right) + abs(left)), 2)

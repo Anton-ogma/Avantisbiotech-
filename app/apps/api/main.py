@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import logging
 import sys
 import time
@@ -17,8 +18,18 @@ from fastapi.responses import JSONResponse
 
 from .db import engine
 from .models import Base
-from .routers import (analyses, crossmodal, devices, figures, imports, ingest, meta,
-                      montage, research, sessions)
+from .routers import (
+    analyses,
+    crossmodal,
+    devices,
+    figures,
+    imports,
+    ingest,
+    meta,
+    montage,
+    research,
+    sessions,
+)
 from .services.bundle import bundle_from_settings
 from .settings import get_settings
 
@@ -31,7 +42,8 @@ async def lifespan(app: FastAPI):
     s = get_settings()
     # MUST §10: невалидная конфигурация РОНЯЕТ ЗАПУСК, а не деградирует молча.
     bundle = bundle_from_settings(s)
-    log.info("режим=%s версии=%s", s.intended_use, bundle.versions)
+    log.info("режим=%s версии=%s защита_контура=%s", s.intended_use, bundle.versions,
+             "секрет хоста" if s.gateway_token else "НЕТ")
     for banner in s.banners:
         log.warning("БАННЕР: %s", banner)
     if s.database_url.startswith("sqlite"):
@@ -52,6 +64,7 @@ app = FastAPI(
 )
 
 _settings = get_settings()
+_MAX_BODY_BYTES = _settings.max_upload_mb * 1024 * 1024
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_settings.cors_origins,
@@ -61,21 +74,62 @@ app.add_middleware(
 )
 
 
+#: Пробы живости и готовности отвечают до проверки секрета: оркестратор ходит
+#: за ними без заголовков хоста, и 401 на /health означал бы вечный рестарт.
+_OPEN_PATHS = frozenset({"/health", "/ready"})
+
+
 @app.middleware("http")
 async def request_context(request: Request, call_next):
-    """Идентификатор запроса и время ответа — база наблюдаемости при горизонтальном
-    масштабировании: без корреляции по request_id разбор инцидента на десятке
-    инстансов невозможен."""
+    """Идентификатор запроса, предел размера тела, доверие к вызывающей стороне
+    и строка доступа.
+
+    Всё четыре — эксплуатационные требования, а не удобства. Без request_id
+    инцидент на десятке инстансов не разобрать; без предела тела процесс
+    роняется одной большой выгрузкой; без общего секрета роль в заголовке
+    назначает себе кто угодно; без строки доступа непонятно, что вообще
+    происходило.
+    """
     request_id = request.headers.get("X-Request-Id") or str(uuid.uuid4())
     started = time.perf_counter()
+    path = request.url.path
+
+    if _settings.gateway_token and path not in _OPEN_PATHS:
+        # Сравнение постоянного времени: посимвольное сравнение секрета
+        # измеряется извне и подбирается по одному байту.
+        supplied = request.headers.get("X-Gateway-Token", "")
+        if not hmac.compare_digest(supplied, _settings.gateway_token):
+            log.warning("request_id=%s %s %s отклонён: секрет хоста не совпал",
+                        request_id, request.method, path)
+            return JSONResponse(
+                {"detail": "вызов не подтверждён секретом хоста", "request_id": request_id},
+                status_code=401, headers={"X-Request-Id": request_id},
+            )
+
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > _MAX_BODY_BYTES:
+        # Отказ ДО чтения тела: смысл предела в том, чтобы гигабайт не заезжал
+        # в процесс, а не в том, чтобы отвергнуть его после приёма.
+        return JSONResponse(
+            {"detail": f"тело запроса больше {_settings.max_upload_mb} МБ",
+             "request_id": request_id},
+            status_code=413, headers={"X-Request-Id": request_id},
+        )
+
     try:
         response = await call_next(request)
-    except Exception:                                        # noqa: BLE001
+    except Exception:
         log.exception("request_id=%s необработанная ошибка", request_id)
         return JSONResponse({"detail": "внутренняя ошибка", "request_id": request_id},
-                            status_code=500)
+                            status_code=500, headers={"X-Request-Id": request_id})
+    took = (time.perf_counter() - started) * 1000
     response.headers["X-Request-Id"] = request_id
-    response.headers["Server-Timing"] = f"app;dur={(time.perf_counter() - started) * 1000:.1f}"
+    response.headers["Server-Timing"] = f"app;dur={took:.1f}"
+    if path not in _OPEN_PATHS:
+        # Ни ПДн, ни patient_ref в строку доступа не идут: журнал доступа
+        # хранится дольше и читается шире, чем аудит (Р-9).
+        log.info("request_id=%s %s %s → %s за %.1f мс",
+                 request_id, request.method, path, response.status_code, took)
     return response
 
 

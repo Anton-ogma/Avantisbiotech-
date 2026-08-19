@@ -18,7 +18,13 @@ from sqlalchemy import select
 
 from .db import engine, sessionmaker
 from .models import (
-    Analysis, Base, Measurement, PatientRef, Session, SessionPlan, Trial,
+    Analysis,
+    Base,
+    Measurement,
+    PatientRef,
+    Session,
+    SessionPlan,
+    Trial,
 )
 from .services.bundle import bundle_from_settings
 from .services.session_service import load_session, materialize_param_values, run_analysis
@@ -167,11 +173,12 @@ def _asymmetry(params: dict[str, float], prefix: str, out_prefix: str) -> None:
     """Асимметрия по парам L/R — единая формула для ЭМГ и силы (Р-41)."""
     bases = {c[:-2] for c in params if c.endswith(("_L", "_R")) and c.startswith(prefix)}
     for base in bases:
-        r, l = params.get(f"{base}_R"), params.get(f"{base}_L")
-        if r is None or l is None or (abs(r) + abs(l)) == 0:
+        right, left = params.get(f"{base}_R"), params.get(f"{base}_L")
+        if right is None or left is None or (abs(right) + abs(left)) == 0:
             continue
         name = base[len(prefix):] if prefix.endswith("_") else base
-        params[f"{out_prefix}{name}"] = round(200 * (r - l) / (abs(r) + abs(l)), 2)
+        params[f"{out_prefix}{name}"] = round(
+            200 * (right - left) / (abs(right) + abs(left)), 2)
 
 
 async def seed(patients: int = 6) -> None:
@@ -237,7 +244,8 @@ async def seed(patients: int = 6) -> None:
                     sdc = bundle.thresholds.sdc(param) or 1.0
                     shift = EFFECTS.get(code, {}).get(param, 0.0) * sdc
                     noise = rng.gauss(0, sdc * 0.18)
-                    values[param] = round(base_value + shift + noise + base_value * drift_rate * t, 3)
+                    values[param] = round(
+                        base_value + shift + noise + base_value * drift_rate * t, 3)
                 db.add(Measurement(
                     trial_id=trial.id, modality="formetric", params=values,
                     quality_flags=[] if rng.random() > 0.12 else ["excess_sway"],

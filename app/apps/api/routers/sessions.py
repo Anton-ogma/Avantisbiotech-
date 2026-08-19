@@ -1,24 +1,44 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
+from contracts.schemas import (
+    ConfigVersions,
+    InterimOut,
+    PlanCreate,
+    PlannedProbeIn,
+    PlanOut,
+    QualityItem,
+    QualityReviewIn,
+    SessionCreate,
+    SessionOut,
+    ShortlistIn,
+    TrialCreate,
+)
+from domain.protocol import (
+    PlannedProbe,
+    ProtocolError,
+    TrialFact,
+    assert_transition,
+    randomize_within_groups,
+    reconcile_with_plan,
+    validate_plan,
+    validate_trial,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from contracts.schemas import (
-    ConfigVersions, InterimOut, PlanCreate, PlannedProbeIn, PlanOut, QualityItem,
-    QualityReviewIn, SessionCreate, SessionOut, ShortlistIn, TrialCreate, ViolationOut,
-)
-from domain.protocol import (
-    PlannedProbe, ProtocolError, TrialFact, assert_transition, randomize_within_groups,
-    reconcile_with_plan, validate_plan, validate_trial,
-)
-
 from ..db import get_db
 from ..models import (
-    Exclusion, Measurement, PatientRef, ProtocolDeviation, Session, SessionPlan, Trial,
+    Exclusion,
+    Measurement,
+    PatientRef,
+    ProtocolDeviation,
+    Session,
+    SessionPlan,
+    Trial,
 )
 from ..security import Principal, audit, current_principal, require
 from ..services.bundle import bundle_from_session, bundle_from_settings
@@ -111,7 +131,8 @@ async def list_sessions(
     principal: Principal = Depends(current_principal),
 ) -> list[SessionOut]:
     counts = (
-        select(Trial.session_id, func.count(Trial.id).label("n")).group_by(Trial.session_id).subquery()
+        select(Trial.session_id,
+            func.count(Trial.id).label("n")).group_by(Trial.session_id).subquery()
     )
     rows = (await db.execute(
         select(Session, func.coalesce(counts.c.n, 0))
@@ -175,7 +196,7 @@ async def approve_plan(
                 for p in planned],
         randomization={"scheme": session.randomization_scheme, "seed": session.randomization_seed},
         approved_by=principal.actor_ref,
-        approved_at=datetime.now(timezone.utc),
+        approved_at=datetime.now(UTC),
     )
     db.add(plan)
     session.status = "plan_approved"

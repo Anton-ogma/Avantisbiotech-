@@ -1,9 +1,13 @@
 """Табличные тесты алгоритмов: z, PI, RI, effect size, вердикты, когерентность (§16)."""
 import pytest
-from domain.config import load_bundle
 from domain.drift import NeutralObservation, baseline_drift, fit_baseline
 from domain.effects import (
-    ProbeResponse, build_shortlists, classify, coherence, combined_verdict, param_effect,
+    ProbeResponse,
+    build_shortlists,
+    classify,
+    coherence,
+    combined_verdict,
+    param_effect,
 )
 from domain.indices import postural_index, response_index, z_score
 from domain.reliability import detectable_effect, icc_2_1, passport
@@ -27,7 +31,8 @@ def test_ri_uses_magnitude_not_sign(bundle):
 
 
 @pytest.mark.parametrize("effect,expected", [(0.0, "noise"), (0.99, "noise"), (1.0, "probable"),
-                                            (1.99, "probable"), (2.0, "reliable"), (None, "undefined")])
+                                            (1.99, "probable"), (2.0, "reliable"), (None,
+                                                "undefined")])
 def test_effect_classification(effect, expected):
     assert classify(effect) == expected
 

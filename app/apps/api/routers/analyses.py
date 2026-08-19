@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
+from contracts.schemas import (
+    AnalysisOut,
+    AnalyzeIn,
+    ConfigVersions,
+    ReportCreate,
+    ReportOut,
+    SignIn,
+)
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from contracts.schemas import (
-    AnalysisOut, AnalyzeIn, ConfigVersions, ReportCreate, ReportOut, SignIn,
-)
-from domain.protocol import ProtocolError, assert_transition
 
 from ..db import get_db
 from ..models import Analysis, Report, Session
@@ -139,7 +142,8 @@ async def create_report(
         json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
     ).hexdigest()
 
-    report = Report(analysis_id=a.id, variant=payload.variant, status="draft", document_hash=doc_hash)
+    report = Report(analysis_id=a.id, variant=payload.variant, status="draft",
+        document_hash=doc_hash)
     db.add(report)
 
     session = await db.get(Session, a.session_id)
@@ -198,7 +202,7 @@ async def sign_report(
     report.signature = payload.signature
     report.timestamp_token = payload.timestamp_token
     report.signed_by = payload.clinician_ref
-    report.signed_at = datetime.now(timezone.utc)
+    report.signed_at = datetime.now(UTC)
     report.status = "signed"
     await db.flush()
     await audit(db, principal, "report.sign", "report", str(report.id),
@@ -249,7 +253,8 @@ async def history(
             "visits": [{"session_id": str(s.id), "started_at": s.started_at.isoformat(),
                         "neutral_definition": s.neutral_definition} for s in sessions],
             "comparable": False,
-            "reason": "neutral_definition различается между визитами — разности не вычисляются (§12)",
+            "reason": "neutral_definition различается между визитами — "
+                      "разности не вычисляются (§12)",
         }
     if not common:
         return {
@@ -281,7 +286,8 @@ async def history(
         "visits": visits,
         "comparable": True,
         "versions": dict(zip(
-            ("norms_version", "thresholds_version", "profile_version", "registry_version"), chosen
+            ("norms_version", "thresholds_version", "profile_version", "registry_version"),
+            chosen, strict=True,
         )),
         "note": "Набор версий выбран как самый свежий, общий для всех визитов (Р-2)",
     }

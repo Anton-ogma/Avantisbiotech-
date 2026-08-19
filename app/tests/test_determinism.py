@@ -8,7 +8,8 @@ BASE = {"PELVIC_TILT": 10.0, "KYPHOTIC_ANGLE_ICT_ITL": 45.0, "LATERAL_DEVIATION_
 def _session() -> SessionInput:
     return SessionInput("s1", "p1", "habitual_occlusion", True, [
         TrialInput("t1", "MAND_NEUTRAL_WITH_APPARATUS", "reference", 1, 0, True, BASE),
-        TrialInput("t2", "MAND_CLENCH", "diagnostic", 1, 300, False, {**BASE, "LATERAL_DEVIATION_RMS": 9.5}),
+        TrialInput("t2", "MAND_CLENCH", "diagnostic", 1, 300, False,
+            {**BASE, "LATERAL_DEVIATION_RMS": 9.5}),
         TrialInput("t3", "MAND_NEUTRAL_WITH_APPARATUS", "reference", 1, 900, True, BASE),
         TrialInput("t4", "MAND_NEUTRAL_WITH_APPARATUS", "reference", 1, 1500, True, BASE),
     ])

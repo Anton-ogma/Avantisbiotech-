@@ -77,7 +77,8 @@ def assert_report_allowed(principal: Principal, variant: str, settings: Settings
 
 def _hash(payload: Any) -> str:
     return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False, default=str).encode()
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            default=str).encode()
     ).hexdigest()
 
 

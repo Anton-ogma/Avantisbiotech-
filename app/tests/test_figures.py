@@ -140,6 +140,7 @@ async def client(monkeypatch):
     db_mod._sessionmaker = None
 
     from httpx import ASGITransport, AsyncClient
+
     from apps.api.main import app
     from apps.api.models import Base
 

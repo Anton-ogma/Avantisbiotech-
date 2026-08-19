@@ -3,27 +3,42 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from contracts.schemas import (
-    CohortAnalysisOut, CohortCreate, CohortOut, HypothesisCreate, HypothesisOut,
-    PassportOut, ProtocolAnalyticsOut, RepeatabilityOut,
+    CohortAnalysisOut,
+    CohortCreate,
+    CohortOut,
+    HypothesisCreate,
+    HypothesisOut,
+    PassportOut,
+    ProtocolAnalyticsOut,
+    RepeatabilityOut,
 )
 from domain.hashing import canonical_json, input_hash
 from domain.reliability import detectable_effect, operator_variance_share, passport
 from domain.stats import (
-    benjamini_hochberg, multivariate_permutation, one_sample_permutation, response_axes,
+    benjamini_hochberg,
+    multivariate_permutation,
+    one_sample_permutation,
+    response_axes,
 )
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import (
-    Analysis, Cohort, CohortAnalysis, Exclusion, Hypothesis, ParamValue,
-    ProtocolDeviation, Session, Trial,
+    Analysis,
+    Cohort,
+    CohortAnalysis,
+    Exclusion,
+    Hypothesis,
+    ParamValue,
+    ProtocolDeviation,
+    Session,
+    Trial,
 )
 from ..security import Principal, audit, current_principal, require
 from ..services.bundle import bundle_from_settings
@@ -156,7 +171,8 @@ async def protocol_analytics(
             "assigned": assigned,
             "unit": unit,
             "mean_below": round(sum(below) / len(below), 4) if below else None,
-            "mean_at_or_above": round(sum(at_or_above) / len(at_or_above), 4) if at_or_above else None,
+            "mean_at_or_above": round(sum(at_or_above) / len(at_or_above),
+                4) if at_or_above else None,
             "note": "если средние сопоставимы, назначенное значение избыточно",
         }
 
@@ -165,7 +181,8 @@ async def protocol_analytics(
         spec = bundle.probes.get(code)
         if spec and len(pts) >= 3:
             settle_calibration.append(
-                {"probe_code": code, **summarize([(float(a), b) for a, b in pts], spec.settle_sec, "sec")}
+                {"probe_code": code,
+                    **summarize([(float(a), b) for a, b in pts], spec.settle_sec, "sec")}
             )
     carryover_calibration = []
     for code, pts in sorted(carry_buckets.items()):
@@ -193,7 +210,8 @@ async def protocol_analytics(
     ]
 
     dev_rows = (await db.execute(
-        select(ProtocolDeviation.kind, func.count(ProtocolDeviation.id)).group_by(ProtocolDeviation.kind)
+        select(ProtocolDeviation.kind,
+            func.count(ProtocolDeviation.id)).group_by(ProtocolDeviation.kind)
     )).all()
     total_sessions = (await db.execute(select(func.count(Session.id)))).scalar_one()
     low_conf = (await db.execute(
@@ -240,7 +258,7 @@ async def create_cohort(
     cohort = Cohort(
         name=payload.name, criteria=payload.criteria,
         session_ids=working, lockbox_session_ids=lockbox,
-        frozen_at=datetime.now(timezone.utc),
+        frozen_at=datetime.now(UTC),
     )
     db.add(cohort)
     await db.flush()
@@ -305,7 +323,9 @@ async def register_hypothesis(
 async def list_hypotheses(
     db: AsyncSession = Depends(get_db), principal: Principal = Depends(current_principal),
 ) -> list[HypothesisOut]:
-    rows = (await db.execute(select(Hypothesis).order_by(Hypothesis.registered_at.desc()))).scalars().all()
+    rows = (
+        await db.execute(
+            select(Hypothesis).order_by(Hypothesis.registered_at.desc()))).scalars().all()
     return [
         HypothesisOut(
             id=h.id, statement=h.statement, mode=h.mode, status=h.status,  # type: ignore[arg-type]
@@ -354,7 +374,7 @@ async def analyze_cohort(
                 "гипотеза зарегистрирована ПОСЛЕ фиксации когорты — подтверждающий "
                 "анализ на этих данных недопустим (§6)",
             )
-        cohort.lockbox_opened_at = datetime.now(timezone.utc)
+        cohort.lockbox_opened_at = datetime.now(UTC)
         target_sessions = [UUID(i) for i in cohort.lockbox_session_ids]
     else:
         target_sessions = [UUID(i) for i in cohort.session_ids]

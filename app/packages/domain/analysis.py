@@ -9,6 +9,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from .config import ConfigBundle
+from .crossmodal import muscle_index, strength_index
 from .drift import NeutralObservation, baseline_drift, fit_baseline
 from .effects import (
     ParamEffect,
@@ -18,9 +19,8 @@ from .effects import (
     interim_repeat_codes,
     param_effect,
 )
-from .crossmodal import muscle_index, strength_index
 from .hashing import input_hash
-from .indices import compute_z, postural_index, response_index
+from .indices import postural_index, response_index
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +93,8 @@ def _effects_to_dict(effects: list[ParamEffect], bundle: ConfigBundle) -> list[d
     return out
 
 
-def analyze(session: SessionInput, bundle: ConfigBundle, *, interim: bool = False) -> AnalysisResult:
+def analyze(session: SessionInput, bundle: ConfigBundle, *,
+    interim: bool = False) -> AnalysisResult:
     warnings: list[str] = []
     if bundle.thresholds.is_demo:
         # MUST §10: предупреждение о некалиброванных порогах — на всех экранах.
@@ -131,7 +132,8 @@ def analyze(session: SessionInput, bundle: ConfigBundle, *, interim: bool = Fals
         if index_kind == "PI":
             base_idx = postural_index(baseline_at_t, bundle).total
             trial_idx = postural_index(trial.values, bundle).total
-            delta_index = None if base_idx is None or trial_idx is None else round(trial_idx - base_idx, 6)
+            delta_index = None if base_idx is None or trial_idx is None else round(
+                trial_idx - base_idx, 6)
         else:
             # RI по построению уже относительно нейтрали: чем больше, тем сильнее
             # отклик. Знак берём у доменно-взвешенной суммы Δ, чтобы отличить
@@ -144,7 +146,8 @@ def analyze(session: SessionInput, bundle: ConfigBundle, *, interim: bool = Fals
                 # Если таких нет, величина остаётся, а знак не назначается —
                 # предрешать результат нельзя.
                 signed = sum(
-                    1 if e.interpretation == "worsening" else -1 if e.interpretation == "improving" else 0
+                    1 if e.interpretation == "worsening"
+                    else -1 if e.interpretation == "improving" else 0
                     for e in effects
                 )
                 delta_index = round(ri if signed >= 0 else -ri, 6)
@@ -257,7 +260,8 @@ def _combined_probes(responses: list[ProbeResponse], threshold: float) -> list[d
             continue
         a_code, b_code = code[len("COMBI_"):].split("_PLUS_", 1)
         a, b = by_code.get(a_code), by_code.get(b_code)
-        if not a or not b or a.delta_index is None or b.delta_index is None or r.delta_index is None:
+        if (not a or not b or a.delta_index is None or b.delta_index is None
+                or r.delta_index is None):
             continue
         out.append({
             "code": code,

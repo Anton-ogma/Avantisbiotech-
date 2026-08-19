@@ -7,10 +7,24 @@ dependencies = [
   "fastapi>=0.110", "uvicorn[standard]>=0.29", "pydantic>=2.7", "pydantic-settings>=2.2",
   "sqlalchemy>=2.0", "alembic>=1.13", "asyncpg>=0.29", "pyyaml>=6.0",
   "python-multipart>=0.0.9", "arq>=0.26", "boto3>=1.34",
+  # Разбор печатных протоколов DIERS и снимков экрана миографа. Обе библиотеки
+  # использовались боевым кодом и не были объявлены НИГДЕ: тесты проходили на
+  # локальном окружении, где они оказались случайно, а в образе загрузка PDF
+  # упала бы на ImportError. Проверяется тестом test_declared_dependencies.
+  "pypdf>=4.2", "pillow>=10.3",
 ]
 
+# Пакеты не устанавливаются: код едет в образ файлами и работает через PYTHONPATH.
+# Объявление нужно ради ОДНОГО источника правды по зависимостям — раньше их
+# список дублировался в Dockerfile и уже разошёлся (boto3 был только здесь).
+[tool.setuptools]
+py-modules = []
+
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "aiosqlite>=0.20", "ruff>=0.5", "mypy>=1.10"]
+dev = [
+  "pytest>=8", "pytest-asyncio>=0.23", "httpx>=0.27", "aiosqlite>=0.20",
+  "ruff>=0.5", "mypy>=1.10", "types-PyYAML>=6.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -22,8 +36,44 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+# RUF001/002/003 — «неоднозначные» кириллические символы. Код и комментарии здесь
+# по-русски намеренно: предметная область русскоязычная, и переписывать «К» на «K»
+# ради линтера значило бы портить текст ради инструмента. 853 срабатывания из 1104
+# были именно этим.
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+# Загрузчик путей до импортов — сознательный приём: пакеты подключаются из
+# соседнего каталога, и без него импорт ниже не разрешится.
+"apps/**" = ["E402"]
+# NamedTemporaryFile(delete=False) обязан пережить блок: файл нужен процессу
+# после закрытия дескриптора, и контекстный менеджер его бы удалил.
+"tools/**" = ["E402", "SIM115"]
+"tests/**" = ["E402", "SIM115"]
+"db/migrations/**" = ["E402"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Вызов в значении по умолчанию — способ объявления зависимостей в FastAPI, а не
+# ошибка: Depends/File/Header вычисляются фреймворком на каждом запросе.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.File", "fastapi.Form",
+                          "fastapi.Header", "fastapi.Query", "fastapi.Body",
+                          "fastapi.Path", "apps.api.security.require",
+                          "security.require", "require"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
+mypy_path = "packages"
 files = ["packages/domain", "packages/contracts"]
+
+[[tool.mypy.overrides]]
+# Разбор PDF и изображений: собственных аннотаций библиотеки не дают, и строгая
+# проверка домена не должна из-за этого останавливаться.
+module = ["pypdf", "pypdf.*", "PIL", "PIL.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Валидаторы pydantic — декораторы без аннотаций по своей природе; требовать их
+# типизации значит требовать её от чужой библиотеки.
+module = ["contracts.schemas"]
+disallow_untyped_decorators = false

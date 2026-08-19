@@ -5,7 +5,10 @@ help:
 	@echo "dev      — API на 8000 и веб на 5173 (демо-БД sqlite)"
 	@echo "seed     — демо-данные: 6 пациентов с полным протоколом"
 	@echo "test     — pytest, вся таблица приёмки §16"
-	@echo "lint     — ruff + mypy по чистому домену"
+	@echo "lint     — ruff по всему коду"
+	@echo "types    — mypy по домену и контрактам"
+	@echo "check    — то же, что проверяет CI: линт, типы, тесты, миграции"
+	@echo "migrate  — alembic upgrade head (нужен DIERS_DATABASE_URL)"
 	@echo "up/down  — docker compose, on-prem развёртывание"
 
 DEMO_DB := sqlite+aiosqlite:///$(PWD)/demo.db
@@ -26,15 +29,25 @@ test:
 	PYTHONPATH=$(PWD)/packages:$(PWD) python -m pytest tests -q
 
 lint:
-	ruff check packages apps
-	mypy packages/domain
+	ruff check packages apps tools tests
+
+types:
+	mypy
+
+# Ровно то, что гоняет CI: расхождение между «у меня всё зелено» и проверкой
+# на сервере — источник самых дорогих сюрпризов.
+check: lint types test
+	DIERS_DATABASE_URL=$(DEMO_DB) $(PY) alembic upgrade head
 
 up:
+	@test -f .env || { echo "нет .env — скопируйте .env.example и заполните секреты"; exit 1; }
 	docker compose up --build -d
-	@echo "веб http://localhost:8080 · API http://localhost:8000/docs"
+	@echo "веб http://localhost:8080 (API наружу не публикуется — только через него)"
 
 down:
 	docker compose down
 
+# Схема на Postgres создаётся ТОЛЬКО отсюда: автосоздание из моделей включено
+# лишь для sqlite-демо. В compose это отдельный одноразовый сервис `migrate`.
 migrate:
 	alembic upgrade head

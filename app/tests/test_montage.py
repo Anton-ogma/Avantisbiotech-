@@ -99,8 +99,8 @@ def test_one_sided_montage_is_allowed_but_warned():
 def test_unnamed_channels_resolve_only_with_a_montage():
     """Главный случай: миограф подписал «CH1…CH4», и без прописи мышцу не
     восстановить ничем. Догадка здесь запрещена."""
-    from importers.emg_csv import EmgCsvParser
     from domain.montage import from_template
+    from importers.emg_csv import EmgCsvParser
 
     blob = "Condition;CH1;CH2;CH3;CH4\nлев окк;38,2;51,7;22,4;29,8\n".encode()
     parser = EmgCsvParser()
@@ -118,8 +118,8 @@ def test_unnamed_channels_resolve_only_with_a_montage():
 
 def test_apply_montage_rescues_partially_named_files():
     """Часть каналов подписана понятно, часть — «CH7»: спасаем вторую половину."""
-    from importers import parse_blob
     from domain.montage import apply_montage, build_montage
+    from importers import parse_blob
 
     blob = "Condition;MASS_L;MASS_R;CH7\nлев окк;38,2;51,7;12,5\n".encode()
     _, results = parse_blob(blob)
@@ -146,6 +146,7 @@ async def client(monkeypatch):
     db_mod._sessionmaker = None
 
     from httpx import ASGITransport, AsyncClient
+
     from apps.api.main import app
     from apps.api.models import Base
 

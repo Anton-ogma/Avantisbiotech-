@@ -2,7 +2,10 @@
 import random
 
 from domain.stats import (
-    benjamini_hochberg, multivariate_permutation, one_sample_permutation, response_axes,
+    benjamini_hochberg,
+    multivariate_permutation,
+    one_sample_permutation,
+    response_axes,
 )
 
 

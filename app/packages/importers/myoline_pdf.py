@@ -163,11 +163,11 @@ def _add_asymmetries(params: dict[str, float]) -> None:
     bases = {c[:-2] for c in params
              if c.startswith("MYO_FORCE_") and c.endswith(("_L", "_R"))}
     for base in bases:
-        r, l = params.get(f"{base}_R"), params.get(f"{base}_L")
-        if r is None or l is None or (abs(r) + abs(l)) == 0:
+        right, left = params.get(f"{base}_R"), params.get(f"{base}_L")
+        if right is None or left is None or (abs(right) + abs(left)) == 0:
             continue
         params[base.replace("MYO_FORCE_", "MYO_ASYM_")] = round(
-            200 * (r - l) / (abs(r) + abs(l)), 2)
+            200 * (right - left) / (abs(right) + abs(left)), 2)
 
 
 #: Пары агонист/антагонист, ради которых лист и печатается.
@@ -217,6 +217,10 @@ def _figures(blob: bytes) -> list[Figure]:
             continue
         for im in images:
             try:
+                # `im.image` бывает None, если pypdf не смог декодировать
+                # вложение: размеры тогда взять неоткуда, и лист пропускается.
+                if im.image is None:
+                    continue
                 data, w, h = im.data, im.image.width, im.image.height
             except Exception:                              # pragma: no cover
                 continue

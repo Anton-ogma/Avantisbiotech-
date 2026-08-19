@@ -45,7 +45,7 @@ def benjamini_hochberg(p_values: dict[str, float], q: float = 0.05) -> list[FDRR
     adjusted.reverse()
     return [
         FDRResult(code=code, p_value=p, q_value=round(adj, 6), significant=adj <= q)
-        for (code, p), adj in zip(items, adjusted)
+        for (code, p), adj in zip(items, adjusted, strict=True)
     ]
 
 

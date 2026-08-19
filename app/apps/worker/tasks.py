@@ -13,6 +13,8 @@ for p in (ROOT / "packages", ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
+from typing import ClassVar
+
 from sqlalchemy import select
 
 from apps.api.db import sessionmaker
@@ -60,7 +62,7 @@ async def reanalyze_all(ctx, versions: dict[str, str]) -> dict:
 
 
 class WorkerSettings:
-    functions = [reanalyze_all]
+    functions: ClassVar[list] = [reanalyze_all]
     max_jobs = 8
     job_timeout = 900
 

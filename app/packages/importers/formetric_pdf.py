@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from .base import Figure, ParseResult, register
 
@@ -55,11 +56,14 @@ def structures_in(text: str) -> tuple[str, ...]:
 
 #: Подпись параметра в протоколе → (код значения, код размаха).
 ROW_MAP: dict[str, tuple[str, str]] = {
-    "Угол кифоза ICT-ITL (макс.)": ("DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX", "DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM"),
-    "Угол лордоза ITL-ILS (макс.)": ("DYN_LORDOTIC_ANGLE_ITL_ILS_MAX", "DYN_LORDOTIC_ANGLE_ITL_ILS_ROM"),
+    "Угол кифоза ICT-ITL (макс.)": ("DYN_KYPHOTIC_ANGLE_ICT_ITL_MAX",
+        "DYN_KYPHOTIC_ANGLE_ICT_ITL_ROM"),
+    "Угол лордоза ITL-ILS (макс.)": ("DYN_LORDOTIC_ANGLE_ITL_ILS_MAX",
+        "DYN_LORDOTIC_ANGLE_ITL_ILS_ROM"),
     "Ротация таза": ("DYN_PELVIC_ROTATION", "DYN_PELVIC_ROTATION_ROM"),
     "Перекос таза": ("DYN_PELVIC_OBLIQUITY", "DYN_PELVIC_OBLIQUITY_ROM"),
-    "Сагиттальный дисбаланс VP-DM": ("DYN_SAGITTAL_IMBALANCE_VP_DM", "DYN_SAGITTAL_IMBALANCE_VP_DM_ROM"),
+    "Сагиттальный дисбаланс VP-DM": ("DYN_SAGITTAL_IMBALANCE_VP_DM",
+        "DYN_SAGITTAL_IMBALANCE_VP_DM_ROM"),
 }
 
 #: Знаковые соглашения (§5.3). Канон: вправо / вперёд — положительно.
@@ -248,7 +252,7 @@ class FormetricPdfProtocolParser:
             head = text[:starts[0]].strip()
             if head and sections:
                 sections[-1][0].append(head)      # хвост предыдущего раздела
-            bounds = starts + [len(text)]
+            bounds = [*starts, len(text)]
             for i, begin in enumerate(starts):
                 chunk = text[begin:bounds[i + 1]]
                 # Иллюстрации страницы получает ПЕРВЫЙ её раздел: печать ведёт
@@ -274,7 +278,8 @@ class FormetricPdfProtocolParser:
         return out
 
     @staticmethod
-    def _page_figures(page, structures: tuple[str, ...] = (), index: int = 0) -> list[Figure]:
+    def _page_figures(page: Any, structures: tuple[str, ...] = (),
+                      index: int = 0) -> list[Figure]:
         try:
             images = list(page.images)
         except Exception:                                  # pragma: no cover

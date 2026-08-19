@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
-
 from contracts.schemas import ConfigVersions, ParamInfo, PlatformInfo, ProbeInfo
+from fastapi import APIRouter, Depends
 
 from ..services.bundle import bundle_from_settings
 from ..settings import Settings, get_settings

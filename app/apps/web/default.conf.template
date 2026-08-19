@@ -1,0 +1,44 @@
+# Шаблон разворачивается envsubst при старте контейнера (nginx:alpine делает это
+# сам для /etc/nginx/templates/*.template). Секрет хоста подставляется ЗДЕСЬ, а
+# не в браузере: во вкладке он был бы виден любому, кто открыл инструменты
+# разработчика, и смысл секрета пропал бы.
+server {
+  listen 80;
+  server_name _;
+  root /usr/share/nginx/html;
+
+  # Предел тела совпадает с DIERS_MAX_UPLOAD_MB на стороне API. По умолчанию
+  # nginx отдаёт 413 уже на 1 МБ — то есть заявленный модулем предел в 32 МБ
+  # был недостижим, а пользователь получал вместо внятного отказа страницу
+  # nginx на английском.
+  client_max_body_size ${MAX_UPLOAD_MB}m;
+
+  # Замкнутость контура (Р-23): страница не обращается ни к одному внешнему хосту.
+  add_header Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+  add_header X-Content-Type-Options nosniff always;
+  add_header X-Frame-Options DENY always;
+  add_header Referrer-Policy no-referrer always;
+  add_header Permissions-Policy "geolocation=(), camera=(), microphone=(), bluetooth=(self)" always;
+
+  gzip on;
+  gzip_types text/css application/javascript application/json image/svg+xml;
+  gzip_min_length 1024;
+
+  location /api/ {
+    proxy_pass http://api:8000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Gateway-Token "${DIERS_GATEWAY_TOKEN}";
+    # Идентификатор запроса сквозной: без него строка доступа прокси и лог
+    # приложения не сходятся, и инцидент разбирается по времени на глаз.
+    proxy_set_header X-Request-Id $request_id;
+    # Разбор большой выгрузки и переанализ идут дольше стандартных 60 с.
+    proxy_read_timeout 300s;
+    proxy_request_buffering off;
+  }
+
+  location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; }
+  # Оболочка приложения не кэшируется: иначе после выкатки браузер неделю
+  # показывает старую разметку со ссылками на снесённые ассеты.
+  location = /index.html { add_header Cache-Control "no-store" always; }
+  location / { try_files $uri /index.html; }
+}

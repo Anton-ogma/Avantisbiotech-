@@ -101,8 +101,10 @@ class CadiaxNumericParser:
 
             harmony = _HARMONY.search(line)
             if harmony:
-                params["CDG_HARMONY_R"] = float(harmony.group(1).replace("−", "-").replace(",", "."))
-                params["CDG_HARMONY_L"] = float(harmony.group(2).replace("−", "-").replace(",", "."))
+                params["CDG_HARMONY_R"] = float(
+                    harmony.group(1).replace("−", "-").replace(",", "."))
+                params["CDG_HARMONY_L"] = float(
+                    harmony.group(2).replace("−", "-").replace(",", "."))
                 continue
 
             numbers = [v for v in (_num(m.group()) for m in _NUM.finditer(line)) if v is not None]
@@ -140,11 +142,13 @@ class CadiaxNumericParser:
         # Метрология прибора: собственная воспроизводимость CADIAX. Разница между
         # сторонами на порядок — признак неравного качества записи, а не биологии.
         for mm in (3, 5, 10):
-            r, l = params.get(f"CDG_REPRODUCIBILITY_{mm}MM_R"), params.get(f"CDG_REPRODUCIBILITY_{mm}MM_L")
-            if r is not None and l is not None and max(r, l) > 0:
-                if min(r, l) == 0 or max(r, l) / max(min(r, l), 1e-6) >= 5:
-                    flags.append(f"reproducibility_side_mismatch:{mm}mm")
-                    break
+            right = params.get(f"CDG_REPRODUCIBILITY_{mm}MM_R")
+            left = params.get(f"CDG_REPRODUCIBILITY_{mm}MM_L")
+            if (right is not None and left is not None and max(right, left) > 0
+                    and (min(right, left) == 0
+                         or max(right, left) / max(min(right, left), 1e-6) >= 5)):
+                flags.append(f"reproducibility_side_mismatch:{mm}mm")
+                break
 
         if not params:
             flags.append("no_canonical_columns")

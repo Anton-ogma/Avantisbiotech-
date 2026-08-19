@@ -117,10 +117,10 @@ def joint_asymmetry(values: dict[str, float]) -> float | None:
     bases = {c[:-2] for c in values if c.endswith(("_R", "_L")) and c.startswith("CDG_")}
     shares: list[float] = []
     for base in bases:
-        r, l = values.get(f"{base}_R"), values.get(f"{base}_L")
-        if r is None or l is None or (abs(r) + abs(l)) == 0:
+        right, left = values.get(f"{base}_R"), values.get(f"{base}_L")
+        if right is None or left is None or (abs(right) + abs(left)) == 0:
             continue
-        shares.append(abs(200 * (r - l) / (abs(r) + abs(l))))
+        shares.append(abs(200 * (right - left) / (abs(right) + abs(left))))
     if not shares:
         return None
     return round(sum(shares) / len(shares), 3)
@@ -157,7 +157,8 @@ def synthesize_probe(
                    for c in sorted(base_posture)]
         deltas = {e.code: e.delta for e in effects}
         ri = response_index(deltas, bundle).total
-        signed = sum(1 if e.interpretation == "worsening" else -1 if e.interpretation == "improving" else 0
+        signed = sum(
+            1 if e.interpretation == "worsening" else -1 if e.interpretation == "improving" else 0
                      for e in effects)
         delta_posture = None if ri is None else round(ri if signed >= 0 else -ri, 4)
         direction_known = any(e.interpretation is not None for e in effects
@@ -268,7 +269,8 @@ def synthesize_probe(
     if spec and spec.requires_excursion:
         excursion = match_excursion(
             formetric_excursion_mm,
-            max((v for c, v in trial_values.items() if c.startswith("CDG_MAX_EXCURSION")), default=None),
+            max((v for c, v in trial_values.items() if c.startswith("CDG_MAX_EXCURSION")),
+                default=None),
         )
 
     verdict, rationale = _classify(posture, muscle, strength, coh, direction_known,
@@ -319,7 +321,8 @@ def _classify(
             parts.append("мышечная активность не растёт")
         if coh == "full":
             parts.append("все измеренные сигналы сходятся")
-        if strength.available and strength.delta is not None and abs(strength.delta) >= si_threshold:
+        if (strength.available and strength.delta is not None
+                and abs(strength.delta) >= si_threshold):
             # Сила показывается всегда, но без знака «лучше/хуже»: направление
             # под пробой не установлено, и вердикт на неё не опирается (Р-41).
             parts.append(f"сила меняется на {strength.delta:+.2f} SDC, "

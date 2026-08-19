@@ -1,8 +1,15 @@
 """Валидаторы протокола: каждое нарушение §8.1 блокирует переход (§16)."""
 import pytest
 from domain.protocol import (
-    PlannedProbe, ProtocolError, TrialFact, assert_transition, can_transition,
-    randomize_within_groups, reconcile_with_plan, validate_plan, validate_trial,
+    PlannedProbe,
+    ProtocolError,
+    TrialFact,
+    assert_transition,
+    can_transition,
+    randomize_within_groups,
+    reconcile_with_plan,
+    validate_plan,
+    validate_trial,
 )
 
 FULL_PLAN = [

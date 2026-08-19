@@ -7,10 +7,10 @@ PACKAGES = Path(__file__).resolve().parents[3] / "packages"
 if str(PACKAGES) not in sys.path:
     sys.path.insert(0, str(PACKAGES))
 
-from domain.config import ConfigBundle, load_bundle  # noqa: E402
+from domain.config import ConfigBundle, load_bundle
 
-from ..models import Session  # noqa: E402
-from ..settings import Settings  # noqa: E402
+from ..models import Session
+from ..settings import Settings
 
 
 def bundle_from_settings(s: Settings) -> ConfigBundle:

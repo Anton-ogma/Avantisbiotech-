@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, type Platform, type SessionOut } from "./lib/api";
+import { Banner } from "./components/ui";
 import { CrossModalScreen } from "./screens/CrossModal";
 import { Instrument } from "./screens/Instrument";
 import { Montage } from "./screens/Montage";
@@ -36,9 +37,17 @@ export default function App() {
     () => (localStorage.getItem("diers-theme") as Theme) ?? "auto",
   );
 
-  const reload = () => { api.sessions().then(setSessions).catch(() => {}); };
+  // Отказ загрузки НЕ проглатывается. Пустая оболочка без единого слова —
+  // худший из отказов: пользователь не отличит «данных нет» от «сервер не
+  // отвечает» и будет считать, что обследования потерялись.
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const reload = () => {
+    api.sessions()
+      .then((x) => { setSessions(x); setLoadError(null); })
+      .catch((e) => setLoadError((e as Error).message));
+  };
   useEffect(() => {
-    api.platform().then(setPlatform).catch(() => {});
+    api.platform().then(setPlatform).catch((e) => setLoadError((e as Error).message));
     reload();
   }, []);
 
@@ -110,6 +119,12 @@ export default function App() {
       </nav>
 
       <main className="main">
+        {loadError && (
+          <Banner text={
+            `Данные не загрузились: ${loadError}. Показанное ниже может быть `
+            + "неполным. Проверьте, поднят ли модуль и доступен ли он с этой машины."
+          } />
+        )}
         {session ? (
           <SessionView sessionId={session} onBack={() => setSession(null)} />
         ) : tab === "overview" ? (

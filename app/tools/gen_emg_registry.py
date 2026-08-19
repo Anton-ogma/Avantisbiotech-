@@ -23,7 +23,7 @@ for p in (ROOT / "packages", ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from domain.config import load_muscles  # noqa: E402
+from domain.config import load_muscles
 
 CONFIG = ROOT / "packages" / "config"
 #: Demo-пороги. Назначены по единице измерения, а не измерены: замена приходит

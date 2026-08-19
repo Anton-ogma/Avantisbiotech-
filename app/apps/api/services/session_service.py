@@ -6,14 +6,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from domain.analysis import AnalysisResult, SessionInput, TrialInput, analyze, interim_plan
+from domain.config import ConfigBundle
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from domain.analysis import AnalysisResult, SessionInput, TrialInput, analyze, interim_plan
-from domain.config import ConfigBundle
-
-from ..models import Measurement, Session, Trial
+from ..models import Session, Trial
 
 
 async def load_session(db: AsyncSession, session_id: UUID) -> Session | None:

@@ -8,14 +8,12 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from domain.config import load_montages, load_muscles
+from domain.montage import MontageError, build_montage, from_template, montage_from_channels
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from domain.config import load_montages, load_muscles
-from domain.montage import (MontageError, build_montage, from_template,
-                            montage_from_channels)
 
 from ..db import get_db
 from ..models import MontageTemplateRow, SessionMontageRow
@@ -273,7 +271,9 @@ def _out(row: SessionMontageRow) -> dict:
         "id": str(row.id), "template": row.template, "note": row.note,
         "set_by": row.set_by, "created_at": row.created_at,
         "channels": [
-            {**ch, "muscle_label_ru": (m.label_ru if (m := catalog.get(ch["muscle"])) else ch["muscle"]),
+            {**ch,
+                "muscle_label_ru": (
+                    m.label_ru if (m := catalog.get(ch["muscle"])) else ch["muscle"]),
              "param_code": f"EMG_RMS_{ch['muscle']}_{ch['side']}"}
             for ch in (row.channels or [])
         ],

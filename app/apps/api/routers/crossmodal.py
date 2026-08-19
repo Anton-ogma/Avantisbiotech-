@@ -3,10 +3,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from domain.crossmodal import ProbeSynthesis, rank_probes, synthesize_probe
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from domain.crossmodal import ProbeSynthesis, rank_probes, synthesize_probe
 
 from ..db import get_db
 from ..security import Principal, current_principal

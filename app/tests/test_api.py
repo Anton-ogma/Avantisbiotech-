@@ -1,6 +1,5 @@
 """Сквозные проверки приёмки (§16 ТЗ): регуляторные предохранители, слепота,
 идемпотентность, детерминизм, сопоставимость визитов."""
-import asyncio
 import json
 import os
 import tempfile
@@ -23,6 +22,7 @@ async def client(monkeypatch):
     db_mod._sessionmaker = None
 
     from httpx import ASGITransport, AsyncClient
+
     from apps.api.main import app
     from apps.api.models import Base
 
@@ -112,7 +112,7 @@ async def test_quality_screen_is_blind(client):
 async def test_coach_and_patient_variants_blocked_in_research(client):
     """Р-33: оба варианта содержат предписания, режим research их не выпускает."""
     from apps.api.security import RESEARCH_FORBIDDEN_VARIANTS
-    assert RESEARCH_FORBIDDEN_VARIANTS == {"patient", "coach"}
+    assert {"patient", "coach"} == RESEARCH_FORBIDDEN_VARIANTS
 
 
 @pytest.mark.asyncio
@@ -218,3 +218,100 @@ async def test_concurrent_analyze_returns_stored_analysis_not_500(client):
 
     assert second.status_code == 200, second.text
     assert second.json()["input_hash"] == stored["input_hash"]
+
+
+@pytest.mark.asyncio
+async def test_gateway_token_required_when_configured(monkeypatch):
+    """§15: с заданным секретом хоста вызов без него не принимается.
+
+    Аутентификация пользователя вынесена за модуль — актор и роль приходят
+    заголовками. Но ЧТО запрос пришёл от хоста, не проверялось ничем: кто
+    дотянулся до порта, тот и объявлял себя `X-Actor-Role: admin`. Секрет
+    закрывает дыру, не втаскивая в модуль пользовательскую аутентификацию.
+    """
+    import tempfile
+
+    secret = "x" * 48
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    monkeypatch.setenv("DIERS_DATABASE_URL", f"sqlite+aiosqlite:///{tmp.name}")
+    monkeypatch.setenv("DIERS_GATEWAY_TOKEN", secret)
+
+    import apps.api.db as db_mod
+    import apps.api.settings as settings_mod
+    settings_mod.get_settings.cache_clear()
+    db_mod._engine = None
+    db_mod._sessionmaker = None
+
+    import importlib
+
+    from httpx import ASGITransport, AsyncClient
+
+    import apps.api.main as main_mod
+    importlib.reload(main_mod)
+    from apps.api.models import Base
+    async with db_mod.engine().begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    try:
+        async with AsyncClient(transport=ASGITransport(app=main_mod.app),
+                               base_url="http://t") as c:
+            assert (await c.get("/platform", headers=CLIN)).status_code == 401
+            wrong = "y" * 48       # заголовки только ASCII — отсюда латиница
+            assert (await c.get("/platform", headers={**CLIN, "X-Gateway-Token": wrong})
+                    ).status_code == 401
+            ok = await c.get("/platform", headers={**CLIN, "X-Gateway-Token": secret})
+            assert ok.status_code == 200
+            # Пробы живости отвечают без секрета: иначе оркестратор получал бы
+            # 401 и перезапускал исправный контейнер по кругу.
+            assert (await c.get("/health")).status_code == 200
+    finally:
+        monkeypatch.delenv("DIERS_GATEWAY_TOKEN", raising=False)
+        settings_mod.get_settings.cache_clear()
+        db_mod._engine = None
+        db_mod._sessionmaker = None
+        importlib.reload(main_mod)
+
+
+@pytest.mark.asyncio
+async def test_oversized_body_rejected_before_reading(client):
+    """§5: тело больше предела отвергается по Content-Length, до чтения.
+
+    Смысл предела в том, чтобы гигабайт не заезжал в процесс, а не в том, чтобы
+    отвергнуть его после приёма.
+    """
+    from apps.api.settings import get_settings
+    limit = get_settings().max_upload_mb * 1024 * 1024
+    r = await client.post("/sessions", headers={**OPER, "Content-Length": str(limit + 1)},
+                          content=b"{}")
+    assert r.status_code == 413
+    assert "МБ" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_clinical_mode_requires_gateway_token():
+    """Р-25 + §15: клинический контур без проверки вызывающей стороны не стартует."""
+    from apps.api.settings import Settings
+    with pytest.raises(Exception) as e:
+        Settings(intended_use="clinical", registration_number="РЗН-2026-1")
+    assert "GATEWAY_TOKEN" in str(e.value)
+
+
+@pytest.mark.asyncio
+async def test_short_gateway_token_rejected():
+    """Короткий секрет подбирается перебором — старт с ним запрещён."""
+    from apps.api.settings import Settings
+    with pytest.raises(Exception) as e:
+        Settings(gateway_token="коротко")
+    assert "32" in str(e.value)
+
+
+@pytest.mark.asyncio
+async def test_unprotected_contour_is_announced(client):
+    """Без секрета платформа ГОВОРИТ, что контур открыт.
+
+    Молчаливая незащищённость хуже отсутствия защиты: развернувший считает, что
+    всё в порядке, потому что ничто не возразило.
+    """
+    banners = (await client.get("/platform")).json()["banners"]
+    assert any("Контур не защищён" in b for b in banners)

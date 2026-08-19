@@ -13,13 +13,23 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer,
-    LargeBinary, String, Text, UniqueConstraint,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON, TypeDecorator
 
@@ -39,7 +49,8 @@ class GUID(TypeDecorator):
     cache_ok = True
 
     def load_dialect_impl(self, dialect):
-        return dialect.type_descriptor(PGUUID(as_uuid=True) if dialect.name == "postgresql" else String(36))
+        return dialect.type_descriptor(
+            PGUUID(as_uuid=True) if dialect.name == "postgresql" else String(36))
 
     def process_bind_param(self, value, dialect):
         if value is None:
@@ -61,7 +72,7 @@ def _uuid() -> uuid.UUID:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class PatientRef(Base):
@@ -105,9 +116,10 @@ class Session(Base):
     low_confidence: Mapped[bool] = mapped_column(Boolean, default=False)
     pass_count: Mapped[int] = mapped_column(Integer, default=1)
 
-    trials: Mapped[list["Trial"]] = relationship(back_populates="session", cascade="all, delete-orphan")
-    plan: Mapped["SessionPlan | None"] = relationship(back_populates="session", uselist=False,
-                                                      cascade="all, delete-orphan")
+    trials: Mapped[list[Trial]] = relationship(
+        back_populates="session", cascade="all, delete-orphan")
+    plan: Mapped[SessionPlan | None] = relationship(
+        back_populates="session", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         CheckConstraint(
@@ -178,7 +190,8 @@ class ProtocolDeviation(Base):
 
     __tablename__ = "protocol_deviations"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True)
     trial_id: Mapped[uuid.UUID | None] = mapped_column(GUID)
     kind: Mapped[str] = mapped_column(String(32))
     probe_code: Mapped[str] = mapped_column(String(64))
@@ -190,7 +203,8 @@ class ProtocolDeviation(Base):
 class Trial(Base):
     __tablename__ = "trials"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True)
     probe_code: Mapped[str] = mapped_column(String(64), index=True)
     ordinal: Mapped[int] = mapped_column(Integer)
     #: Проход; подтверждающий повтор — второй проход (Р-28).
@@ -208,7 +222,7 @@ class Trial(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     session: Mapped[Session] = relationship(back_populates="trials")
-    measurements: Mapped[list["Measurement"]] = relationship(back_populates="trial",
+    measurements: Mapped[list[Measurement]] = relationship(back_populates="trial",
                                                              cascade="all, delete-orphan")
     __table_args__ = (Index("ix_trials_session_pass", "session_id", "pass_no", "ordinal"),)
 
@@ -216,7 +230,8 @@ class Trial(Base):
 class RawImport(Base):
     __tablename__ = "raw_imports"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True)
     #: §4 инвариант 1: идемпотентность. Повторная загрузка не создаёт второе обследование.
     file_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     modality: Mapped[str | None] = mapped_column(String(32))
@@ -263,7 +278,8 @@ class ImportFigure(Base):
 class Measurement(Base):
     __tablename__ = "measurements"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    trial_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("trials.id", ondelete="CASCADE"), index=True)
+    trial_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("trials.id", ondelete="CASCADE"),
+        index=True)
     raw_import_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("raw_imports.id"))
     modality: Mapped[str] = mapped_column(String(32))
     params: Mapped[dict] = mapped_column(JSONB_, default=dict)
@@ -298,7 +314,8 @@ class Exclusion(Base):
 
     __tablename__ = "exclusions"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True)
     entity: Mapped[str] = mapped_column(String(32))
     entity_id: Mapped[uuid.UUID] = mapped_column(GUID)
     reason_code: Mapped[str] = mapped_column(String(64))
@@ -312,7 +329,8 @@ class Exclusion(Base):
 class Analysis(Base):
     __tablename__ = "analyses"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"),
+        index=True)
     norms_version: Mapped[str] = mapped_column(String(32))
     thresholds_version: Mapped[str] = mapped_column(String(32))
     rules_version: Mapped[str] = mapped_column(String(32))
@@ -330,7 +348,8 @@ class Analysis(Base):
 class Report(Base):
     __tablename__ = "reports"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    analysis_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("analyses.id", ondelete="CASCADE"), index=True)
+    analysis_id: Mapped[
+        uuid.UUID] = mapped_column(ForeignKey("analyses.id", ondelete="CASCADE"), index=True)
     variant: Mapped[str] = mapped_column(String(16))
     status: Mapped[str] = mapped_column(String(16), default="draft")
     #: Р-22: подписывается ХЭШ ДОКУМЕНТА, а не запись в БД.
@@ -378,7 +397,8 @@ class Hypothesis(Base):
 class CohortAnalysis(Base):
     __tablename__ = "cohort_analyses"
     id: Mapped[uuid.UUID] = mapped_column(GUID, primary_key=True, default=_uuid)
-    cohort_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cohorts.id", ondelete="CASCADE"), index=True)
+    cohort_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("cohorts.id", ondelete="CASCADE"),
+        index=True)
     hypothesis_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("hypotheses.id"))
     mode: Mapped[str] = mapped_column(String(16))
     norms_version: Mapped[str] = mapped_column(String(32))

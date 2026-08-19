@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from itertools import pairwise
 
 #: §9.8. Границы полосы и сеть — не настройки, а часть метода.
 BAND_LOW_HZ = 20.0
@@ -127,7 +128,7 @@ def notch_mains(xs: list[float], fs: float, harmonics: int = 3) -> list[float]:
 
 def rms_envelope(xs: list[float], fs: float, window_sec: float = RMS_WINDOW_SEC) -> list[float]:
     """Скользящее среднеквадратичное. Окно в отсчётах, не меньше одного."""
-    n = max(1, int(round(window_sec * fs)))
+    n = max(1, round(window_sec * fs))
     if not xs:
         return []
     out: list[float] = []
@@ -155,7 +156,7 @@ def mains_share_db(raw: list[float], filtered: list[float]) -> float | None:
     if len(raw) < 2 or len(filtered) < 2:
         return None
     p_kept = sum(x * x for x in filtered) / len(filtered)
-    removed = [r - f for r, f in zip(remove_dc(raw), filtered)]
+    removed = [r - f for r, f in zip(remove_dc(raw), filtered, strict=True)]
     p_removed = sum(x * x for x in removed) / len(removed)
     if p_kept <= 0 or p_removed <= 0:
         return None
@@ -231,10 +232,11 @@ def _add_asymmetry(params: dict[str, float]) -> None:
     bases = {c[len("EMG_RMS_"):-2] for c in params
              if c.startswith("EMG_RMS_") and c.endswith(("_L", "_R"))}
     for base in bases:
-        r, l = params.get(f"EMG_RMS_{base}_R"), params.get(f"EMG_RMS_{base}_L")
-        if r is None or l is None or (abs(r) + abs(l)) == 0:
+        right, left = params.get(f"EMG_RMS_{base}_R"), params.get(f"EMG_RMS_{base}_L")
+        if right is None or left is None or (abs(right) + abs(left)) == 0:
             continue
-        params[f"EMG_ASYM_{base}"] = round(200 * (r - l) / (abs(r) + abs(l)), 2)
+        params[f"EMG_ASYM_{base}"] = round(
+            200 * (right - left) / (abs(right) + abs(left)), 2)
 
 
 def process_capture(
@@ -282,7 +284,7 @@ def process_capture(
             if abs(fs_actual - fs_declared) / fs_declared > 0.05:
                 flags.append(f"resample_suspected:{fs_actual:g}vs{fs_declared:g}")
         gaps = sum(
-            1 for a, b in zip(timestamps_ms, timestamps_ms[1:])
+            1 for a, b in pairwise(timestamps_ms)
             if (b - a) > 1.5 * 1000.0 / fs_declared
         )
         if gaps:

@@ -1,0 +1,6 @@
+# Контекст сборки фронта: node_modules и dist пересобираются в образе, а
+# копирование локальных — это чужая архитектура бинарников и лишние сотни МБ.
+node_modules
+dist
+public/snapshot.js
+tsconfig.tsbuildinfo

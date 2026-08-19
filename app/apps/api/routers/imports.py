@@ -3,19 +3,19 @@ from __future__ import annotations
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from contracts.schemas import ImportOut
 from domain.hashing import file_hash
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from importers import ParserNotFound, parse_blob
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import Measurement, RawImport, Trial
 from ..security import Principal, audit, current_principal, require
 from ..services.figures import store_figures
 from ..services.session_service import load_session, materialize_param_values
+from ..settings import get_settings
 
 
 def _readable(exc: Exception) -> str:
@@ -36,7 +36,14 @@ def _readable(exc: Exception) -> str:
 
 router = APIRouter(prefix="/sessions", tags=["imports"])
 
-MAX_BYTES = 32 * 1024 * 1024      # лимит §5, MUST: молчаливого приёма гигабайта нет
+def max_bytes() -> int:
+    """Лимит §5 из настроек, а не константой в двух файлах.
+
+    Читается при вызове, а не при импорте: развёрнутый экземпляр должен иметь
+    ОДИН предел, заявленный клиенту (413 в middleware) обязан совпадать с
+    проверяемым здесь, а снятый на импорте он замёрз бы мимо конфигурации.
+    """
+    return get_settings().max_upload_mb * 1024 * 1024
 #: Снимки экрана приняты сюда осознанно (Р-44): проводной миограф часто не
 #: даёт выгрузки вообще, и до этого такой файл терялся целиком.
 ALLOWED_SUFFIX = (".csv", ".txt", ".xml", ".c3d", ".edf", ".pdf",
@@ -63,9 +70,9 @@ async def upload(
                             f"допустимые расширения: {', '.join(ALLOWED_SUFFIX)}")
 
     blob = await file.read()
-    if len(blob) > MAX_BYTES:
+    if len(blob) > max_bytes():
         raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                            f"файл больше {MAX_BYTES // 1024 // 1024} МБ")
+                            f"файл больше {max_bytes() // 1024 // 1024} МБ")
 
     digest = file_hash(blob)
     existing = (await db.execute(
@@ -101,7 +108,7 @@ async def upload(
         return ImportOut(id=record.id, file_hash=digest, modality=None, format_id=None,
                          source=source, status="unrecognized", reason=record.reason,  # type: ignore[arg-type]
                          created_at=record.created_at, measurements=0)
-    except Exception as e:                                  # noqa: BLE001
+    except Exception as e:
         record.status, record.reason = "failed", _readable(e)
         await db.flush()
         return ImportOut(id=record.id, file_hash=digest, modality=None, format_id=None,

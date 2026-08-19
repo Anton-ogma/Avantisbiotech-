@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -25,15 +25,14 @@ for p in (ROOT / "packages", ROOT):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
-from sqlalchemy import select
-
 from importers import parse_blob
+from sqlalchemy import select
 
 from .db import engine, sessionmaker
 from .models import Base, Measurement, PatientRef, RawImport, Session, SessionPlan, Trial
 from .services.bundle import bundle_from_settings
 from .services.figures import store_figures
-from .services.session_service import load_session, materialize_param_values, run_analysis
+from .services.session_service import load_session, materialize_param_values
 from .settings import get_settings
 
 FIXTURES = ROOT / "tests" / "fixtures"
@@ -61,7 +60,7 @@ async def ingest() -> None:
         # ── Визит 1: кондилография CADIAX, 30.11.2023 ────────────────────────
         cdg = Session(
             patient_ref=PATIENT, protocol_version=s.protocol_version,
-            started_at=datetime(2023, 11, 30, 14, 16, tzinfo=timezone.utc),
+            started_at=datetime(2023, 11, 30, 14, 16, tzinfo=UTC),
             operator_ref="op-clinic", study_mode=False,
             neutral_definition="habitual_occlusion", lld_mm=0.0,
             platform_config_baseline={"device": "CADIAX 4"},
@@ -83,7 +82,7 @@ async def ingest() -> None:
         # ── Визит 2: формометрия Dynamic4D, 04.03.2025 ──────────────────────
         fmt = Session(
             patient_ref=PATIENT, protocol_version=s.protocol_version,
-            started_at=datetime(2025, 3, 4, 18, 27, tzinfo=timezone.utc),
+            started_at=datetime(2025, 3, 4, 18, 27, tzinfo=UTC),
             operator_ref="op-clinic", study_mode=False,
             neutral_definition="habitual_occlusion", lld_mm=0.0,
             platform_config_baseline={"device": "DIERS formetric 4D", "gait_speed_kmh": 3},
@@ -112,7 +111,7 @@ async def ingest() -> None:
             await db.flush()
             myo = Session(
                 patient_ref=PATIENT_MYO, protocol_version=s.protocol_version,
-                started_at=datetime(2025, 6, 4, 17, 27, tzinfo=timezone.utc),
+                started_at=datetime(2025, 6, 4, 17, 27, tzinfo=UTC),
                 operator_ref="op-clinic", study_mode=False,
                 neutral_definition="habitual_occlusion", lld_mm=0.0,
                 platform_config_baseline={"device": "DIERS myoline"},
@@ -215,7 +214,9 @@ async def _attach(db, session: Session, path: Path, probe_code: str,
 
     from domain.hashing import file_hash
     digest = file_hash(blob)
-    exists = (await db.execute(select(RawImport).where(RawImport.file_hash == digest))).scalar_one_or_none()
+    exists = (
+        await db.execute(
+            select(RawImport).where(RawImport.file_hash == digest))).scalar_one_or_none()
     record = exists or RawImport(
         session_id=session.id, file_hash=digest, modality=parser.modality,
         format_id=parser.format_id, source="manual", status="parsed",

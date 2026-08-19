@@ -32,7 +32,7 @@ def test_mains_is_suppressed_and_emg_band_survives():
     """
     from domain.emg_stream import bandpass, notch_mains, remove_dc
 
-    raw = [a + b for a, b in zip(_tone(120, 50), _tone(50, 200, offset=500))]
+    raw = [a + b for a, b in zip(_tone(120, 50), _tone(50, 200, offset=500), strict=True)]
     out = notch_mains(bandpass(remove_dc(raw), FS), FS)
     assert _amp_at(out, 50) < 0.2 * _amp_at(raw, 50)      # наводка ослаблена ≥5 раз
     assert _amp_at(out, 120) > 0.9 * _amp_at(raw, 120)    # полоса ЭМГ цела
@@ -63,8 +63,9 @@ def test_snr_needs_a_rest_epoch():
     """
     from domain.emg_stream import process_capture
 
-    active = {"CH1": [a + b for a, b in zip(_tone(120, 50), _tone(50, 20, offset=500))]}
-    rest = {"CH1": [a + b for a, b in zip(_tone(120, 5), _tone(50, 20, offset=500))]}
+    active = {
+        "CH1": [a + b for a, b in zip(_tone(120, 50), _tone(50, 20, offset=500), strict=True)]}
+    rest = {"CH1": [a + b for a, b in zip(_tone(120, 5), _tone(50, 20, offset=500), strict=True)]}
 
     without = process_capture(active, FS).channels[0]
     assert without.snr_db is None
@@ -173,6 +174,7 @@ async def client(monkeypatch):
     db_mod._sessionmaker = None
 
     from httpx import ASGITransport, AsyncClient
+
     from apps.api.main import app
     from apps.api.models import Base
 

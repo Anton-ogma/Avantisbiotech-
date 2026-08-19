@@ -59,8 +59,11 @@ def param_effect(code: str, baseline: float, value: float, bundle: ConfigBundle)
         elif direction == "two_sided":
             # Уход от нормы в любую сторону хуже; без норм судить не о чем.
             norm = bundle.norms.get(code)
-            if norm is not None:
-                before, after = abs(baseline - norm.mean), abs(value - norm.mean)  # type: ignore[arg-type]
+            # `Norms.get` отдаёт только определённые нормы, но проверка на None
+            # стоит здесь явно: инвариант живёт в другом модуле, а цена ошибки —
+            # падение анализа на вычитании из None.
+            if norm is not None and norm.mean is not None:
+                before, after = abs(baseline - norm.mean), abs(value - norm.mean)
                 interpretation = "improving" if after < before else "worsening"
         # direction == "unknown" → остаётся None: предрешать результат нельзя.
 
@@ -206,7 +209,8 @@ def build_shortlists(responses: list[ProbeResponse], threshold: float) -> Shortl
     )
 
 
-def interim_repeat_codes(responses: list[ProbeResponse], threshold: float, top: int = 2) -> list[str]:
+def interim_repeat_codes(responses: list[ProbeResponse], threshold: float,
+    top: int = 2) -> list[str]:
     """Промежуточный расчёт для подтверждающего повтора (Р-28).
 
     Возвращает ТОЛЬКО коды проб. Величины, размеры эффекта и направление не
@@ -272,7 +276,7 @@ def condylar_asymmetry(params: dict[str, float], metric: str) -> float | None:
     Возвращает относительную разницу право/лево в процентах. Прибор печатает
     готовые Ratio, но собственный расчёт нужен для метрик, где их нет.
     """
-    r, l = params.get(f"{metric}_R"), params.get(f"{metric}_L")
-    if r is None or l is None or (abs(r) + abs(l)) == 0:
+    right, left = params.get(f"{metric}_R"), params.get(f"{metric}_L")
+    if right is None or left is None or (abs(right) + abs(left)) == 0:
         return None
-    return round(200 * (r - l) / (abs(r) + abs(l)), 2)
+    return round(200 * (right - left) / (abs(right) + abs(left)), 2)

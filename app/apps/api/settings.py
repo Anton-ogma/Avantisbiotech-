@@ -44,8 +44,23 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     audit_retention_days: int = 3650
 
+    # ── Доверие к вызывающей стороне (§15) ────────────────────────────────────
+    #: Аутентификация пользователя вынесена за модуль: заверенный контекст —
+    #: актор и роль — приходит от хоста заголовками. Но ЧТО запрос пришёл именно
+    #: от хоста, до сих пор не проверялось ничем: кто дотянулся до порта, тот и
+    #: представлялся `X-Actor-Role: admin`. Общий секрет закрывает эту дыру, не
+    #: втаскивая в модуль пользовательскую аутентификацию: хост подписывает свои
+    #: вызовы, модуль их принимает, а всё остальное отвергает.
+    #:
+    #: Пустое значение допустимо только в research и только с баннером: без
+    #: секрета контур открыт всем, кто видит порт.
+    gateway_token: str | None = None
+    #: Предел размера тела запроса. До этого его не было вовсе: выгрузка на
+    #: гигабайт спокойно принималась в память процесса.
+    max_upload_mb: int = 32
+
     @model_validator(mode="after")
-    def _guard(self) -> "Settings":
+    def _guard(self) -> Settings:
         if self.intended_use == "clinical" and not self.registration_number:
             # MUST (Р-25): ПО для диагностики и лечения — медизделие (ФЗ-323 ст. 38),
             # эксплуатация без РУ запрещена. Сборка не стартует.
@@ -53,6 +68,20 @@ class Settings(BaseSettings):
                 "intended_use=clinical требует DIERS_REGISTRATION_NUMBER — "
                 "регистрационного удостоверения медицинского изделия (ПП РФ № 1416; "
                 "Решение Совета ЕЭК № 46). Для исследований используйте research."
+            )
+        if self.intended_use == "clinical" and not self.gateway_token:
+            # Клинический контур без проверки вызывающей стороны — открытый
+            # доступ к специальной категории ПДн (ФЗ-152 ст. 10). Роль и актор
+            # приходят заголовками, и без общего секрета их назначает себе
+            # любой, кто видит порт.
+            raise ValueError(
+                "intended_use=clinical требует DIERS_GATEWAY_TOKEN — общего секрета "
+                "с хостом. Без него заголовки X-Actor-Role подделываются кем угодно."
+            )
+        if self.gateway_token is not None and len(self.gateway_token) < 32:
+            raise ValueError(
+                "DIERS_GATEWAY_TOKEN короче 32 символов: подбирается перебором. "
+                "Сгенерируйте `openssl rand -hex 32`."
             )
         if self.llm_endpoint and not self.allow_external_calls:
             host = self.llm_endpoint.split("//")[-1].split("/")[0].split(":")[0]
@@ -78,6 +107,12 @@ class Settings(BaseSettings):
             out.append(
                 "Режим research: платформа не является медицинским изделием, "
                 "терапевтических назначений не выдаёт."
+            )
+        if not self.gateway_token:
+            out.append(
+                "Контур не защищён: общий секрет с хостом (DIERS_GATEWAY_TOKEN) не задан, "
+                "и роль вызывающей стороны ничем не подтверждается. Допустимо только "
+                "на изолированном стенде."
             )
         return out
 

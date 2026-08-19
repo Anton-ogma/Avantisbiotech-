@@ -117,8 +117,13 @@ def _probe(blob: bytes) -> tuple[int, int, float]:
             # Доля тёмного считается по уменьшенной копии: точность здесь не
             # нужна, а полный проход по 4К-снимку стоит секунды.
             small = im.convert("L").resize((32, 32))
-            pixels = [small.getpixel((x, y)) for y in range(32) for x in range(32)]
-            dark = sum(1 for p in pixels if p < 96) / len(pixels)
+            # После convert("L") пиксель — одно целое, но getpixel объявлен
+            # шире (кортеж для цветных режимов, None вне изображения). Явное
+            # приведение здесь не украшение: на нестандартном вложении
+            # сравнение кортежа с числом упало бы прямо в разборе.
+            pixels = [int(v) for x in range(32) for y in range(32)
+                      if isinstance(v := small.getpixel((x, y)), int | float)]
+            dark = (sum(1 for p in pixels if p < 96) / len(pixels)) if pixels else 0.0
         return width, height, round(dark, 3)
     except Exception:                                      # pragma: no cover
         return (*_png_size(blob), 0.0)

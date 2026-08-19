@@ -1,4 +1,4 @@
 """Контракты API (§13 ТЗ). Pydantic v2 — единственный источник типов;
 типы фронтенда генерируются отсюда (`make types`), ручное дублирование запрещено.
 """
-from .schemas import *  # noqa: F401,F403
+from .schemas import *  # noqa: F403

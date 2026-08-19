@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Literal
 
 from .config import ConfigBundle, ProbeSpec
@@ -108,7 +108,8 @@ def validate_plan(
     # #8 нейтраль минимум трижды: начало, середина, конец
     neutrals = [p.position for p, s in specs if s.is_neutral and p.pass_no == 1]
     if len(neutrals) < 3:
-        v.append(Violation("neutral_count", f"нейтраль запланирована {len(neutrals)} раз, нужно ≥3"))
+        v.append(
+            Violation("neutral_count", f"нейтраль запланирована {len(neutrals)} раз, нужно ≥3"))
     else:
         last = max(p.position for p, _ in specs if p.pass_no == 1)
         if min(neutrals) > 1 or max(neutrals) < last:
@@ -130,11 +131,13 @@ def validate_plan(
 
     # #10 seed при любой схеме кроме none (Р-16)
     if randomization_scheme != "none" and randomization_seed is None:
-        v.append(Violation("seed_missing", f"схема {randomization_scheme} требует randomization_seed"))
+        v.append(
+            Violation("seed_missing", f"схема {randomization_scheme} требует randomization_seed"))
 
     # #7 компенсация длины ног — условие сессии, до первой пробы (Р-33)
     if not lld_measured:
-        v.append(Violation("lld_missing", "разница длины ног не измерена, компенсация не зафиксирована"))
+        v.append(
+            Violation("lld_missing", "разница длины ног не измерена, компенсация не зафиксирована"))
 
     return v
 
@@ -166,7 +169,7 @@ def randomize_within_groups(
         rng.shuffle(shuffled)
         result.extend(
             PlannedProbe(p.probe_code, p.role, pos, p.pass_no)
-            for p, pos in zip(shuffled, positions)
+            for p, pos in zip(shuffled, positions, strict=True)
         )
     return sorted(result, key=lambda x: (x.pass_no, x.position))
 
@@ -226,7 +229,8 @@ def reconcile_with_plan(
     fact_keys = [(f.pass_no, f.probe_code) for f in actual]
     for key in plan_keys:
         if key not in fact_keys:
-            dev.append(Deviation("missing", key[1], f"проход {key[0]}: запланирована, не выполнена"))
+            dev.append(
+                Deviation("missing", key[1], f"проход {key[0]}: запланирована, не выполнена"))
     for key in fact_keys:
         if key not in plan_keys:
             dev.append(Deviation("extra", key[1], f"проход {key[0]}: выполнена вне плана"))

@@ -2,5 +2,7 @@
 **/dist
 **/__pycache__
 **/.pytest_cache
-demo.db
+**/*.db
 .venv
+.env
+tests/fixtures/*.pdf

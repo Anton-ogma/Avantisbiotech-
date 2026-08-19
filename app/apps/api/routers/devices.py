@@ -15,14 +15,13 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from domain.config import load_ble_profiles
+from domain.emg_stream import StreamError, process_capture
+from domain.hashing import file_hash
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from domain.config import load_ble_profiles
-from domain.emg_stream import StreamError, process_capture
-from domain.hashing import file_hash
 
 from ..db import get_db
 from ..models import Measurement, RawImport, SessionMontageRow, Trial

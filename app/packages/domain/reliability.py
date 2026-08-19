@@ -31,7 +31,7 @@ class ParamPassport:
     cv_pct: float | None
     reliability_label: str
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, object]:
         return {
             "code": self.code,
             "n_subjects": self.n_subjects,

@@ -82,7 +82,7 @@ class FormetricCsvParser:
         return any(m in joined for m in MARKERS)
 
     def parse(self, blob: bytes) -> list[ParseResult]:
-        headers, rows = read_rows(blob)
+        _headers, rows = read_rows(blob)
         out: list[ParseResult] = []
         for row in rows:
             params: dict[str, float] = {}

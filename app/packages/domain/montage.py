@@ -15,7 +15,9 @@
 """
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from .config import Montage, load_montages, load_muscles
 
@@ -72,7 +74,7 @@ class SessionMontage:
         codes += [f"EMG_ASYM_{m}" for m in sorted(paired)]
         return codes
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, object]:
         return {
             "template": self.template,
             "note": self.note,
@@ -82,7 +84,7 @@ class SessionMontage:
 
 
 def build_montage(
-    channels: list[dict],
+    channels: Sequence[Mapping[str, object]],
     *,
     template: str | None = None,
     note: str = "",
@@ -145,7 +147,7 @@ def build_montage(
 
 
 def montage_from_channels(
-    channels: list[dict], *, code: str, label_ru: str,
+    channels: Sequence[Mapping[str, object]], *, code: str, label_ru: str,
     labels: dict[str, str] | None = None,
 ) -> SessionMontage:
     """Разворачивает произвольный набор «мышца + сторона» в монтаж (Р-45).
@@ -156,7 +158,7 @@ def montage_from_channels(
     """
     catalog = load_muscles()
     labels = labels or {}
-    out: list[dict] = []
+    out: list[dict[str, str]] = []
     for ch in channels:
         muscle = catalog.get(str(ch.get("muscle", "")))
         if muscle is None:
@@ -197,7 +199,7 @@ def unresolved_channels(headers: list[str], montage: SessionMontage | None) -> l
     Возвращаются оператору как список к ручной прописи. Пустой список — не
     повод для тишины: значит, прописывать нечего.
     """
-    from importers.emg_csv import resolve_channel      # локально: слой выше домена
+    from importers.emg_csv import resolve_channel  # локально: слой выше домена
 
     channel_map = montage.channel_map() if montage else None
     out = []
@@ -209,7 +211,7 @@ def unresolved_channels(headers: list[str], montage: SessionMontage | None) -> l
     return out
 
 
-def apply_montage(result, montage: SessionMontage | None):
+def apply_montage(result: Any, montage: SessionMontage | None) -> Any:
     """Достраивает разбор ЭМГ по монтажу сессии.
 
     Работает ПОСЛЕ парсера, а не внутри него, и это не компромисс. Парсер
@@ -254,7 +256,8 @@ def _recompute_asymmetry(params: dict[str, float]) -> None:
     bases = {c[len("EMG_RMS_"):-2] for c in params
              if c.startswith("EMG_RMS_") and c.endswith(("_L", "_R"))}
     for base in bases:
-        r, l = params.get(f"EMG_RMS_{base}_R"), params.get(f"EMG_RMS_{base}_L")
-        if r is None or l is None or (abs(r) + abs(l)) == 0:
+        right, left = params.get(f"EMG_RMS_{base}_R"), params.get(f"EMG_RMS_{base}_L")
+        if right is None or left is None or (abs(right) + abs(left)) == 0:
             continue
-        params[f"EMG_ASYM_{base}"] = round(200 * (r - l) / (abs(r) + abs(l)), 2)
+        params[f"EMG_ASYM_{base}"] = round(
+            200 * (right - left) / (abs(right) + abs(left)), 2)

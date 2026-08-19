@@ -17,26 +17,33 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from domain.hashing import file_hash
 from domain.montage import MontageError, SessionMontage, apply_montage, build_montage
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from importers import ParserNotFound, parse_blob
 from importers.emg_csv import EmgCsvParser
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import Measurement, RawImport, Session, Trial
 from ..security import Principal, audit, require
 from ..services.bundle import bundle_from_session
 from ..services.figures import store_figures
-from .imports import _readable
 from ..services.session_service import load_session, materialize_param_values
+from ..settings import get_settings
+from .imports import _readable
 
 router = APIRouter(prefix="/sessions", tags=["ingest"])
 
-MAX_BYTES = 32 * 1024 * 1024
+def max_bytes() -> int:
+    """Лимит §5 из настроек, а не константой в двух файлах.
+
+    Читается при вызове, а не при импорте: развёрнутый экземпляр должен иметь
+    ОДИН предел, заявленный клиенту (413 в middleware) обязан совпадать с
+    проверяемым здесь, а снятый на импорте он замёрз бы мимо конфигурации.
+    """
+    return get_settings().max_upload_mb * 1024 * 1024
 GROUP_ORDER = {"reference": 0, "diagnostic": 1, "control": 1, "podal": 2, "therapeutic": 3}
 
 
@@ -53,7 +60,7 @@ class FileOutcome:
 
 
 
-async def _session_montage(db: AsyncSession, session_id) -> "SessionMontage | None":
+async def _session_montage(db: AsyncSession, session_id) -> SessionMontage | None:
     """Действующий монтаж сессии, если оператор его задал."""
     from ..models import SessionMontageRow
 
@@ -73,7 +80,7 @@ async def _session_montage(db: AsyncSession, session_id) -> "SessionMontage | No
         return None
 
 
-def _emg_by_montage(blob: bytes, montage: "SessionMontage | None"):
+def _emg_by_montage(blob: bytes, montage: SessionMontage | None):
     """Повторная попытка открыть файл как ЭМГ, опираясь на монтаж сессии."""
     if montage is None:
         return None
@@ -107,8 +114,9 @@ async def auto_ingest(
     for upload in files:
         name = upload.filename or "без имени"
         blob = await upload.read()
-        if len(blob) > MAX_BYTES:
-            outcomes.append(FileOutcome(name, "rejected", reason="файл больше 32 МБ"))
+        if len(blob) > max_bytes():
+            outcomes.append(FileOutcome(
+                name, "rejected", reason=f"файл больше {max_bytes() // 1024 // 1024} МБ"))
             continue
 
         digest = file_hash(blob)
@@ -121,7 +129,8 @@ async def auto_ingest(
                                         reason="файл уже импортирован"))
             continue
 
-        record = RawImport(session_id=session.id, file_hash=digest, source="manual", status="queued")
+        record = RawImport(session_id=session.id, file_hash=digest, source="manual",
+            status="queued")
         db.add(record)
         await db.flush()
 
@@ -139,12 +148,13 @@ async def auto_ingest(
                 outcomes.append(FileOutcome(name, "unrecognized", reason=str(e)))
                 continue
             parser, results = retry
-        except Exception as e:                                        # noqa: BLE001
+        except Exception as e:
             record.status, record.reason = "failed", _readable(e)
             outcomes.append(FileOutcome(name, "failed", reason=record.reason))
             continue
 
-        record.modality, record.format_id, record.status = parser.modality, parser.format_id, "parsed"
+        record.modality, record.format_id = parser.modality, parser.format_id
+        record.status = "parsed"
 
         for result in results:
             apply_montage(result, montage)
